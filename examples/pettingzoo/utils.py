@@ -21,6 +21,7 @@ from meltingpot import substrate
 from ml_collections import config_dict
 from pettingzoo import utils as pettingzoo_utils
 from pettingzoo.utils import wrappers
+from meltingpot.substrate import get_factory_from_config
 
 from ..gym import utils
 
@@ -50,8 +51,9 @@ class _MeltingPotPettingZooEnv(pettingzoo_utils.ParallelEnv):
   def __init__(self, env_config, max_cycles):
     self.env_config = config_dict.ConfigDict(env_config)
     self.max_cycles = max_cycles
-    self._env = substrate.build(
-        self.env_config, roles=self.env_config.default_player_roles)
+    self._env = get_factory_from_config(self.env_config).build(roles=self.env_config.default_player_roles)
+    # self._env = substrate.build( #! wasn't working this thought self.env_config was a string, and tried to call get_factory from name
+    #     self.env_config, roles=self.env_config.default_player_roles)
     self._num_players = len(self._env.observation_spec())
     self.possible_agents = [
         PLAYER_STR_FORMAT.format(index=index)
@@ -70,7 +72,7 @@ class _MeltingPotPettingZooEnv(pettingzoo_utils.ParallelEnv):
   def state(self):
     return self._env.observation()
 
-  def reset(self, seed=None):
+  def reset(self, seed=None, options=None):
     """See base class."""
     timestep = self._env.reset()
     self.agents = self.possible_agents[:]

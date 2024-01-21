@@ -116,6 +116,7 @@ def main():
       max_cycles=rollout_len,
       env_config=env_config,
   )
+  env.render_mode = "rgb_array"
   env = ss.observation_lambda_v0(env, lambda x, _: x["RGB"], lambda s: s["RGB"])
   env = ss.frame_stack_v1(env, num_frames)
   env = ss.pettingzoo_env_to_vec_env_v1(env)
