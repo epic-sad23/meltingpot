@@ -2,6 +2,9 @@ runs
 # MacOS metadata.
 .DS_Store
 
+# VS Code
+.vscode
+
 # Byte-compiled Python code.
 *.py[cod]
 __pycache__/
