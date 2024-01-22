@@ -215,8 +215,6 @@ if __name__ == "__main__":
     envs = gym.wrappers.RecordEpisodeStatistics(envs)
     envs = gym.wrappers.RecordVideo(envs, f"videos/{run_name}")
 
-    args.num_envs *= env.num_envs
-
     """
     single environment observations have dimensions 88x88x(12+7)
     for 88x88 pixels in 3 RGB channels, multiplied by the frame stacking
@@ -236,7 +234,7 @@ if __name__ == "__main__":
     optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=1e-5)
 
     # ALGO Logic: Storage setup
-    obs = torch.zeros((args.num_steps, args.num_envs) + envs.single_observation_space.shape).to(device)
+    obs = torch.zeros((args.num_steps*num_agents, args.num_envs) + envs.single_observation_space.shape).to(device)
     """
     we set the first dimension of obs to be the number of steps
     we will then add observations to this by calling obs[step] = next_obvs
@@ -259,7 +257,7 @@ if __name__ == "__main__":
     next_obs = torch.Tensor(envs.reset()[0]).to(device)
 
 
-    next_done = torch.zeros(args.num_envs).to(device)
+    next_done = torch.zeros(args.num_envs*num_agents).to(device)
     num_updates = args.total_timesteps // args.batch_size
 
     for update in range(1, num_updates + 1):
