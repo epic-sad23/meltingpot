@@ -118,7 +118,11 @@ class Agent(nn.Module):
         x is an observation - in our case with shape 7x88x88x19
         """
         x = x.clone()
-        x[:, :, :, [0, 1, 2, 3]] /= 255.0
+        num_rgb_channels = 12
+        """
+        we only divide the 4 stack frames x 3 RGB channels - NOT the agent indicators
+        """
+        x[:, :, :, :num_rgb_channels] /= 255.0
         hidden = self.network(x.permute((0, 3, 1, 2)))
         logits = self.actor(hidden)
         probs = Categorical(logits=logits)
