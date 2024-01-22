@@ -1,0 +1,9 @@
+/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/pettingzoo/utils/conversions.py:320: UserWarning: The `infos` dictionary returned by `env.reset` was empty. OverwritingAgent IDs will be used as keys
+  warnings.warn(
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/Users/Henry_1/Documents/Part B/Career ML Stuff/meltingpot/examples/pettingzoo/cleanrl_train.py", line 291, in <module>
+    print("update number " + str(update) + " total reward " + total_reward)
+          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~
+TypeError: can only concatenate str (not "numpy.float64") to str

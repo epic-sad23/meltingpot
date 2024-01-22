@@ -1,0 +1,175 @@
+/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/pettingzoo/utils/conversions.py:320: UserWarning: The `infos` dictionary returned by `env.reset` was empty. OverwritingAgent IDs will be used as keys
+  warnings.warn(
+/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/supersuit/vector/sb3_vector_wrapper.py:52: UserWarning: PettingZoo environments do not take the `render(mode)` argument, to change rendering mode, re-initialize the environment using the `render_mode` argument.
+  warnings.warn(
+/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/gymnasium/wrappers/monitoring/video_recorder.py:133: UserWarning: [33mWARN: Env returned None on `render()`. Disabling further rendering for video recorder by marking as disabled: path=/Users/Henry_1/Documents/Part B/Career ML Stuff/meltingpot/videos/rl-video-step-0-to-step-200.mp4 metadata_path=/Users/Henry_1/Documents/Part B/Career ML Stuff/meltingpot/videos/rl-video-step-0-to-step-200.meta.json
+  logger.warn(
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/Users/Henry_1/Documents/Part B/Career ML Stuff/meltingpot/examples/pettingzoo/cleanrl_train.py", line 292, in <module>
+    next_obs, reward, done, info = envs.step(action.cpu().numpy())
+                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/stable_baselines3/common/vec_env/base_vec_env.py", line 206, in step
+    return self.step_wait()
+           ^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/stable_baselines3/common/vec_env/vec_video_recorder.py", line 92, in step_wait
+    self.video_recorder.capture_frame()
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/gymnasium/wrappers/monitoring/video_recorder.py", line 113, in capture_frame
+    frame = self.env.render()
+            ^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/supersuit/vector/sb3_vector_wrapper.py", line 55, in render
+    return self.venv.render()
+           ^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/supersuit/vector/concat_vec_env.py", line 102, in render
+    return self.vec_envs[0].render()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/supersuit/vector/markov_vector_wrapper.py", line 109, in render
+    return self.par_env.render()
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/pettingzoo/utils/conversions.py", line 227, in render
+    return self.aec_env.render()
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/pettingzoo/utils/wrappers/order_enforcing.py", line 85, in render
+    return super().render()
+           ^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/pettingzoo/utils/wrappers/base.py", line 35, in render
+    return self.env.render()
+           ^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/pettingzoo/utils/wrappers/order_enforcing.py", line 85, in render
+    return super().render()
+           ^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/pettingzoo/utils/wrappers/base.py", line 35, in render
+    return self.env.render()
+           ^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/pettingzoo/utils/conversions.py", line 402, in render
+    return self.env.render()
+           ^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/pettingzoo/utils/wrappers/base_parallel.py", line 37, in render
+    return self.env.render()
+           ^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/pettingzoo/utils/conversions.py", line 227, in render
+    return self.aec_env.render()
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/pettingzoo/utils/wrappers/order_enforcing.py", line 85, in render
+    return super().render()
+           ^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/pettingzoo/utils/wrappers/base.py", line 35, in render
+    return self.env.render()
+           ^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/pettingzoo/utils/wrappers/order_enforcing.py", line 85, in render
+    return super().render()
+           ^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/pettingzoo/utils/wrappers/base.py", line 35, in render
+    return self.env.render()
+           ^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/pettingzoo/utils/conversions.py", line 402, in render
+    return self.env.render()
+           ^^^^^^^^^^^^^^^^^
+  File "/Users/Henry_1/Documents/Part B/Career ML Stuff/meltingpot/examples/pettingzoo/utils.py", line 110, in render
+    plt.cla()
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/matplotlib/pyplot.py", line 1251, in cla
+    return gca().cla()
+           ^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/matplotlib/axes/_base.py", line 1397, in cla
+    self.clear()
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/matplotlib/axes/_base.py", line 1388, in clear
+    self.__clear()
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/matplotlib/axes/_base.py", line 1271, in __clear
+    axis.clear()  # Also resets the scale to linear.
+    ^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/matplotlib/axis.py", line 918, in clear
+    self.reset_ticks()
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/matplotlib/axis.py", line 940, in reset_ticks
+    self.set_clip_path(self.axes.patch)
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/matplotlib/_api/deprecation.py", line 297, in wrapper
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/matplotlib/axis.py", line 1111, in set_clip_path
+    for child in self.majorTicks + self.minorTicks:
+                 ^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/matplotlib/axis.py", line 586, in __get__
+    tick = instance._get_tick(major=True)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/matplotlib/axis.py", line 1562, in _get_tick
+    return self._tick_class(self.axes, 0, major=major, **tick_kw)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/matplotlib/axis.py", line 474, in __init__
+    data=([0], [0]), transform=ax.get_yaxis_transform("tick1"))
+                               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/matplotlib/axes/_base.py", line 1010, in get_yaxis_transform
+    return self.spines.left.get_spine_transform()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/matplotlib/spines.py", line 341, in get_spine_transform
+    self._ensure_position_is_set()
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/matplotlib/spines.py", line 206, in _ensure_position_is_set
+    self.set_position(self._position)
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/matplotlib/spines.py", line 331, in set_position
+    self.axis.reset_ticks()
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/matplotlib/axis.py", line 940, in reset_ticks
+    self.set_clip_path(self.axes.patch)
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/matplotlib/_api/deprecation.py", line 297, in wrapper
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/matplotlib/axis.py", line 1111, in set_clip_path
+    for child in self.majorTicks + self.minorTicks:
+                 ^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/matplotlib/axis.py", line 586, in __get__
+    tick = instance._get_tick(major=True)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/matplotlib/axis.py", line 1562, in _get_tick
+    return self._tick_class(self.axes, 0, major=major, **tick_kw)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/matplotlib/axis.py", line 476, in __init__
+    data=([1], [0]), transform=ax.get_yaxis_transform("tick2"))
+                               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/matplotlib/axes/_base.py", line 1013, in get_yaxis_transform
+    return self.spines.right.get_spine_transform()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/matplotlib/spines.py", line 341, in get_spine_transform
+    self._ensure_position_is_set()
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/matplotlib/spines.py", line 206, in _ensure_position_is_set
+    self.set_position(self._position)
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/matplotlib/spines.py", line 331, in set_position
+    self.axis.reset_ticks()
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/matplotlib/axis.py", line 940, in reset_ticks
+    self.set_clip_path(self.axes.patch)
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/matplotlib/_api/deprecation.py", line 297, in wrapper
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/matplotlib/axis.py", line 1111, in set_clip_path
+    for child in self.majorTicks + self.minorTicks:
+                 ^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/matplotlib/axis.py", line 586, in __get__
+    tick = instance._get_tick(major=True)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/matplotlib/axis.py", line 1562, in _get_tick
+    return self._tick_class(self.axes, 0, major=major, **tick_kw)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/matplotlib/axis.py", line 470, in __init__
+    super().__init__(*args, **kwargs)
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/matplotlib/axis.py", line 182, in __init__
+    self.label2 = mtext.Text(
+                  ^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/matplotlib/text.py", line 139, in __init__
+    self._reset_visual_defaults(
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/matplotlib/text.py", line 176, in _reset_visual_defaults
+    self.set_fontproperties(fontproperties)
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/matplotlib/text.py", line 1314, in set_fontproperties
+    self._fontproperties = FontProperties._from_any(fp).copy()
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/matplotlib/font_manager.py", line 628, in _from_any
+    return cls()
+           ^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/matplotlib/font_manager.py", line 599, in __init__
+    self.set_family(family)
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/matplotlib/font_manager.py", line 731, in set_family
+    family = mpl.rcParams['font.family']
+             ~~~~~~~~~~~~^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/matplotlib/__init__.py", line 762, in __getitem__
+    return self._get(key)
+           ^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/matplotlib/__init__.py", line 709, in _get
+    return dict.__getitem__(self, key)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+KeyboardInterrupt

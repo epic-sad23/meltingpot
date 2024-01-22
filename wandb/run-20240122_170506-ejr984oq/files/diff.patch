@@ -1,0 +1,156 @@
+diff --git a/examples/pettingzoo/cleanrl_train.py b/examples/pettingzoo/cleanrl_train.py
+index 0534ef1..ec9a4bb 100644
+--- a/examples/pettingzoo/cleanrl_train.py
++++ b/examples/pettingzoo/cleanrl_train.py
+@@ -9,6 +9,7 @@ import time
+ import gymnasium as gym
+ from meltingpot import substrate
+ import numpy as np
++import stable_baselines3
+ import supersuit as ss
+ import torch
+ from torch.distributions.categorical import Categorical
+@@ -30,7 +31,7 @@ def parse_args():
+         help="if toggled, `torch.backends.cudnn.deterministic=False`")
+     parser.add_argument("--cuda", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
+         help="if toggled, cuda will be enabled by default")
+-    parser.add_argument("--track", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
++    parser.add_argument("--track", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
+         help="if toggled, this experiment will be tracked with Weights and Biases")
+     parser.add_argument("--wandb-project-name", type=str, default="ppo",
+         help="the wandb's project name")
+@@ -42,13 +43,13 @@ def parse_args():
+     # Algorithm specific arguments
+     parser.add_argument("--env-id", type=str, default="harvest_open",
+         help="the id of the environment")
+-    parser.add_argument("--total-timesteps", type=int, default=1000,
++    parser.add_argument("--total-timesteps", type=int, default=200,
+         help="total timesteps of the experiments")
+     parser.add_argument("--learning-rate", type=float, default=1e-4,
+         help="the learning rate of the optimizer")
+     parser.add_argument("--num-envs", type=int, default=1,
+         help="the number of parallel game environments")
+-    parser.add_argument("--num-steps", type=int, default=128,
++    parser.add_argument("--num-steps", type=int, default=50,
+         help="the number of steps to run in each environment per policy rollout")
+     parser.add_argument("--anneal-lr", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
+         help="Toggle learning rate annealing for policy and value networks")
+@@ -180,7 +181,7 @@ if __name__ == "__main__":
+ 
+     env_name = "commons_harvest__open"
+     env_config = substrate.get_config(env_name)
+-    num_cpus = 1  # number of cpus
++    num_cpus = 0  # number of cpus
+     num_frames = 4
+     model_path = None  # Replace this with a saved model
+ 
+@@ -206,14 +207,21 @@ if __name__ == "__main__":
+         env,
+         num_vec_envs=args.num_envs,
+         num_cpus=num_cpus,
+-        base_class="gymnasium")
++        base_class="stable_baselines3")
++    """
++    gymnasium or sb3 base class? Main difference in reset() method:
++    # Note: SB3's vector envs return only observations on reset, and store infos in `self.reset_infos`
++    """
++
++    #envs = stable_baselines3.common.vec_env.VecVideoRecorder(envs, './videos', (lambda x: True), video_length=200, name_prefix='rl-video')
++
+ 
+     envs.single_observation_space = envs.observation_space
+     envs.single_action_space = envs.action_space
+     envs.is_vector_env = True
+ 
+-    envs = gym.wrappers.RecordEpisodeStatistics(envs)
+-    envs = gym.wrappers.RecordVideo(envs, f"videos/{run_name}")
++    #envs = gym.wrappers.RecordEpisodeStatistics(envs)
++    #envs = gym.wrappers.RecordVideo(envs, f"videos/{run_name}")
+ 
+     """
+     single environment observations have dimensions 88x88x(12+7)
+@@ -234,18 +242,18 @@ if __name__ == "__main__":
+     optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=1e-5)
+ 
+     # ALGO Logic: Storage setup
+-    obs = torch.zeros((args.num_steps*num_agents, args.num_envs) + envs.single_observation_space.shape).to(device)
++    obs = torch.zeros((args.num_steps, args.num_envs*num_agents) + envs.single_observation_space.shape).to(device)
+     """
+     we set the first dimension of obs to be the number of steps
+     we will then add observations to this by calling obs[step] = next_obvs
+     note each observation is thus 7x88x88x19 - whilst `obs` is 128x7x88x88x19
+     with that first dimension for storing all the steps (in each env) per policy rollout
+     """
+-    actions = torch.zeros((args.num_steps, args.num_envs) + envs.single_action_space.shape).to(device)
+-    logprobs = torch.zeros((args.num_steps, args.num_envs)).to(device)
+-    rewards = torch.zeros((args.num_steps, args.num_envs)).to(device)
+-    dones = torch.zeros((args.num_steps, args.num_envs)).to(device)
+-    values = torch.zeros((args.num_steps, args.num_envs)).to(device)
++    actions = torch.zeros((args.num_steps, args.num_envs*num_agents) + envs.single_action_space.shape).to(device)
++    logprobs = torch.zeros((args.num_steps, args.num_envs*num_agents)).to(device)
++    rewards = torch.zeros((args.num_steps, args.num_envs*num_agents)).to(device)
++    dones = torch.zeros((args.num_steps, args.num_envs*num_agents)).to(device)
++    values = torch.zeros((args.num_steps, args.num_envs*num_agents)).to(device)
+ 
+     # TRY NOT TO MODIFY: start the game
+     global_step = 0
+@@ -254,13 +262,37 @@ if __name__ == "__main__":
+     seems that envs.reset() now returns a tuble with what we want first,
+     and then a list flattened_infos second. So I'm calling envs.reset()[0]
+     """
+-    next_obs = torch.Tensor(envs.reset()[0]).to(device)
++    next_obs = torch.Tensor(envs.reset()).to(device)
+ 
+ 
+     next_done = torch.zeros(args.num_envs*num_agents).to(device)
+     num_updates = args.total_timesteps // args.batch_size
+ 
+     for update in range(1, num_updates + 1):
++        if(update % 10 == 1):
++          next_obs = torch.Tensor(envs.reset()).to(device)
++          total_reward = 0
++          for step in range(0, args.num_steps):
++            obs[step] = next_obs
++            dones[step] = next_done
++
++            # ALGO LOGIC: action logic
++            with torch.no_grad():
++                action, logprob, _, value = agent.get_action_and_value(next_obs)
++                values[step] = value.flatten()
++            actions[step] = action
++            logprobs[step] = logprob
++
++            # TRY NOT TO MODIFY: execute the game and log data.
++            next_obs, reward, done, info = envs.step(action.cpu().numpy())
++            total_reward += sum(reward)
++            rewards[step] = torch.tensor(reward).to(device).view(-1)
++            next_obs, next_done = torch.Tensor(next_obs).to(device), torch.Tensor(done).to(device)
++          print("update number " + str(update) + " total reward " + str(total_reward))
++          writer.add_scalar("charts/evaluation_reward", total_reward, global_step)
++          next_obs = torch.Tensor(envs.reset()).to(device)
++
++
+         # Annealing the rate if instructed to do so.
+         if args.anneal_lr:
+             frac = 1.0 - (update - 1.0) / num_updates
+@@ -285,7 +317,7 @@ if __name__ == "__main__":
+             next_obs, next_done = torch.Tensor(next_obs).to(device), torch.Tensor(done).to(device)
+ 
+             for idx, item in enumerate(info):
+-                player_idx = idx % 2
++                player_idx = idx % 7
+                 if "episode" in item.keys():
+                     print(f"global_step={global_step}, {player_idx}-episodic_return={item['episode']['r']}")
+                     writer.add_scalar(f"charts/episodic_return-player{player_idx}", item["episode"]["r"], global_step)
+diff --git a/examples/pettingzoo/utils.py b/examples/pettingzoo/utils.py
+index 8b70b09..35935f3 100644
+--- a/examples/pettingzoo/utils.py
++++ b/examples/pettingzoo/utils.py
+@@ -104,6 +104,7 @@ class _MeltingPotPettingZooEnv(pettingzoo_utils.ParallelEnv):
+     self.state() is a list of length 7 - for each player environment
+     We shall render just the first of these, i.e. self.state()[0]
+     """
++    #print(self.state())
+     rgb_arr = self.state()[0]['WORLD.RGB']
+     if mode == 'human':
+       plt.cla()

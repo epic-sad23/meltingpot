@@ -1,0 +1,216 @@
+2024-01-22 16:45:15,919 INFO    StreamThr :10502 [internal.py:wandb_internal():86] W&B internal server running at pid: 10502, started at: 2024-01-22 16:45:15.919283
+2024-01-22 16:45:15,920 DEBUG   HandlerThread:10502 [handler.py:handle_request():146] handle_request: status
+2024-01-22 16:45:15,925 INFO    WriterThread:10502 [datastore.py:open_for_write():87] open: /Users/Henry_1/Documents/Part B/Career ML Stuff/meltingpot/wandb/run-20240122_164515-p4kktj9j/run-p4kktj9j.wandb
+2024-01-22 16:45:15,925 DEBUG   SenderThread:10502 [sender.py:send():382] send: header
+2024-01-22 16:45:15,944 DEBUG   SenderThread:10502 [sender.py:send():382] send: run
+2024-01-22 16:45:17,281 INFO    SenderThread:10502 [dir_watcher.py:__init__():211] watching files in: /Users/Henry_1/Documents/Part B/Career ML Stuff/meltingpot/wandb/run-20240122_164515-p4kktj9j/files
+2024-01-22 16:45:17,281 INFO    SenderThread:10502 [sender.py:_start_run_threads():1136] run started: p4kktj9j with start time 1705941915.920532
+2024-01-22 16:45:17,285 DEBUG   HandlerThread:10502 [handler.py:handle_request():146] handle_request: check_version
+2024-01-22 16:45:17,285 DEBUG   SenderThread:10502 [sender.py:send_request():409] send_request: check_version
+2024-01-22 16:45:17,393 DEBUG   HandlerThread:10502 [handler.py:handle_request():146] handle_request: run_start
+2024-01-22 16:45:17,402 DEBUG   HandlerThread:10502 [system_info.py:__init__():27] System info init
+2024-01-22 16:45:17,402 DEBUG   HandlerThread:10502 [system_info.py:__init__():42] System info init done
+2024-01-22 16:45:17,402 INFO    HandlerThread:10502 [system_monitor.py:start():194] Starting system monitor
+2024-01-22 16:45:17,402 INFO    SystemMonitor:10502 [system_monitor.py:_start():158] Starting system asset monitoring threads
+2024-01-22 16:45:17,402 INFO    HandlerThread:10502 [system_monitor.py:probe():214] Collecting system info
+2024-01-22 16:45:17,403 INFO    SystemMonitor:10502 [interfaces.py:start():190] Started cpu monitoring
+2024-01-22 16:45:17,403 INFO    SystemMonitor:10502 [interfaces.py:start():190] Started disk monitoring
+2024-01-22 16:45:17,406 DEBUG   HandlerThread:10502 [system_info.py:probe():151] Probing system
+2024-01-22 16:45:17,406 INFO    SystemMonitor:10502 [interfaces.py:start():190] Started gpuapple monitoring
+2024-01-22 16:45:17,407 INFO    SystemMonitor:10502 [interfaces.py:start():190] Started memory monitoring
+2024-01-22 16:45:17,408 INFO    SystemMonitor:10502 [interfaces.py:start():190] Started network monitoring
+2024-01-22 16:45:17,412 DEBUG   HandlerThread:10502 [system_info.py:_probe_git():136] Probing git
+2024-01-22 16:45:17,435 DEBUG   HandlerThread:10502 [system_info.py:_probe_git():144] Probing git done
+2024-01-22 16:45:17,435 DEBUG   HandlerThread:10502 [system_info.py:probe():199] Probing system done
+2024-01-22 16:45:17,435 DEBUG   HandlerThread:10502 [system_monitor.py:probe():223] {'os': 'macOS-12.6-arm64-arm-64bit', 'python': '3.11.7', 'heartbeatAt': '2024-01-22T16:45:17.406829', 'startedAt': '2024-01-22T16:45:15.915551', 'docker': None, 'cuda': None, 'args': (), 'state': 'running', 'program': '-m examples.pettingzoo.cleanrl_train', 'codePathLocal': None, 'git': {'remote': 'https://github.com/hegasz/meltingpot', 'commit': '4ab08c2d27ca887bd9672418d51f625197a7a55f'}, 'email': 'henry.gasztowtt@gmail.com', 'root': '/Users/Henry_1/Documents/Part B/Career ML Stuff/meltingpot', 'host': 'Henrys-MacBook-Pro-5.local', 'username': 'Henry', 'executable': '/Library/Frameworks/Python.framework/Versions/3.11/bin/python3', 'cpu_count': 8, 'cpu_count_logical': 8, 'cpu_freq': {'current': 3228, 'min': 600, 'max': 3228}, 'cpu_freq_per_core': [{'current': 3228, 'min': 600, 'max': 3228}], 'disk': {'/': {'total': 460.4317207336426, 'used': 21.778568267822266}}, 'gpuapple': {'type': 'arm', 'vendor': 'Apple'}, 'memory': {'total': 16.0}}
+2024-01-22 16:45:17,435 INFO    HandlerThread:10502 [system_monitor.py:probe():224] Finished collecting system info
+2024-01-22 16:45:17,435 INFO    HandlerThread:10502 [system_monitor.py:probe():227] Publishing system info
+2024-01-22 16:45:17,435 DEBUG   HandlerThread:10502 [system_info.py:_save_code():45] Saving code
+2024-01-22 16:45:17,435 WARNING HandlerThread:10502 [system_info.py:_save_code():47] unable to save code -- program entry not found
+2024-01-22 16:45:17,435 DEBUG   HandlerThread:10502 [system_info.py:_save_patches():83] Saving git patches
+2024-01-22 16:45:17,545 DEBUG   HandlerThread:10502 [system_info.py:_save_patches():125] Saving git patches done
+2024-01-22 16:45:17,546 INFO    HandlerThread:10502 [system_monitor.py:probe():229] Finished publishing system info
+2024-01-22 16:45:17,549 DEBUG   SenderThread:10502 [sender.py:send():382] send: files
+2024-01-22 16:45:17,549 INFO    SenderThread:10502 [sender.py:_save_file():1403] saving file wandb-metadata.json with policy now
+2024-01-22 16:45:17,549 INFO    SenderThread:10502 [sender.py:_save_file():1403] saving file diff.patch with policy now
+2024-01-22 16:45:17,549 INFO    SenderThread:10502 [sender.py:_save_file():1403] saving file upstream_diff_d6847dc65f580a552b808ee50764bc8ccce8c44c.patch with policy now
+2024-01-22 16:45:17,551 DEBUG   HandlerThread:10502 [handler.py:handle_request():146] handle_request: python_packages
+2024-01-22 16:45:17,551 DEBUG   SenderThread:10502 [sender.py:send_request():409] send_request: python_packages
+2024-01-22 16:45:17,552 DEBUG   HandlerThread:10502 [handler.py:handle_request():146] handle_request: stop_status
+2024-01-22 16:45:17,552 DEBUG   SenderThread:10502 [sender.py:send_request():409] send_request: stop_status
+2024-01-22 16:45:17,553 DEBUG   HandlerThread:10502 [handler.py:handle_request():146] handle_request: internal_messages
+2024-01-22 16:45:17,554 INFO    HandlerThread:10502 [handler.py:handle_tbrecord():767] handling tbrecord: tbrecord {
+  log_dir: "runs/harvest_open__cleanrl_train__1__1705941913"
+  save: true
+}
+control {
+  relay_id: "5e30c8d3560447f7b0037c29dc1071ef"
+}
+_info {
+  stream_id: "p4kktj9j"
+}
+
+2024-01-22 16:45:17,555 DEBUG   HandlerThread:10502 [config_util.py:dict_from_config_file():101] no default config file found in config-defaults.yaml
+2024-01-22 16:45:18,755 INFO    Thread-12 :10502 [dir_watcher.py:_on_file_created():271] file/dir created: /Users/Henry_1/Documents/Part B/Career ML Stuff/meltingpot/wandb/run-20240122_164515-p4kktj9j/files/upstream_diff_d6847dc65f580a552b808ee50764bc8ccce8c44c.patch
+2024-01-22 16:45:18,755 INFO    Thread-12 :10502 [dir_watcher.py:_on_file_created():271] file/dir created: /Users/Henry_1/Documents/Part B/Career ML Stuff/meltingpot/wandb/run-20240122_164515-p4kktj9j/files/requirements.txt
+2024-01-22 16:45:18,756 INFO    Thread-12 :10502 [dir_watcher.py:_on_file_created():271] file/dir created: /Users/Henry_1/Documents/Part B/Career ML Stuff/meltingpot/wandb/run-20240122_164515-p4kktj9j/files/wandb-metadata.json
+2024-01-22 16:45:18,756 INFO    Thread-12 :10502 [dir_watcher.py:_on_file_created():271] file/dir created: /Users/Henry_1/Documents/Part B/Career ML Stuff/meltingpot/wandb/run-20240122_164515-p4kktj9j/files/diff.patch
+2024-01-22 16:45:19,043 DEBUG   SenderThread:10502 [sender.py:send():382] send: telemetry
+2024-01-22 16:45:19,043 DEBUG   SenderThread:10502 [sender.py:send():382] send: tbrecord
+2024-01-22 16:45:19,044 DEBUG   SenderThread:10502 [sender.py:send():382] send: exit
+2024-01-22 16:45:19,044 INFO    SenderThread:10502 [sender.py:send_exit():589] handling exit code: 255
+2024-01-22 16:45:19,044 INFO    SenderThread:10502 [sender.py:send_exit():591] handling runtime: 1
+2024-01-22 16:45:19,044 INFO    SenderThread:10502 [sender.py:_save_file():1403] saving file wandb-summary.json with policy end
+2024-01-22 16:45:19,044 INFO    SenderThread:10502 [sender.py:send_exit():597] send defer
+2024-01-22 16:45:19,045 DEBUG   HandlerThread:10502 [handler.py:handle_request():146] handle_request: defer
+2024-01-22 16:45:19,045 INFO    HandlerThread:10502 [handler.py:handle_request_defer():172] handle defer: 0
+2024-01-22 16:45:19,045 DEBUG   SenderThread:10502 [sender.py:send_request():409] send_request: defer
+2024-01-22 16:45:19,045 INFO    SenderThread:10502 [sender.py:send_request_defer():613] handle sender defer: 0
+2024-01-22 16:45:19,045 INFO    SenderThread:10502 [sender.py:transition_state():617] send defer: 1
+2024-01-22 16:45:19,045 DEBUG   HandlerThread:10502 [handler.py:handle_request():146] handle_request: defer
+2024-01-22 16:45:19,045 INFO    HandlerThread:10502 [handler.py:handle_request_defer():172] handle defer: 1
+2024-01-22 16:45:19,045 DEBUG   SenderThread:10502 [sender.py:send_request():409] send_request: defer
+2024-01-22 16:45:19,045 INFO    SenderThread:10502 [sender.py:send_request_defer():613] handle sender defer: 1
+2024-01-22 16:45:19,045 INFO    SenderThread:10502 [sender.py:transition_state():617] send defer: 2
+2024-01-22 16:45:19,045 DEBUG   HandlerThread:10502 [handler.py:handle_request():146] handle_request: defer
+2024-01-22 16:45:19,045 INFO    HandlerThread:10502 [handler.py:handle_request_defer():172] handle defer: 2
+2024-01-22 16:45:19,045 INFO    HandlerThread:10502 [system_monitor.py:finish():203] Stopping system monitor
+2024-01-22 16:45:19,045 DEBUG   SystemMonitor:10502 [system_monitor.py:_start():172] Starting system metrics aggregation loop
+2024-01-22 16:45:19,045 DEBUG   SystemMonitor:10502 [system_monitor.py:_start():179] Finished system metrics aggregation loop
+2024-01-22 16:45:19,045 INFO    HandlerThread:10502 [interfaces.py:finish():202] Joined cpu monitor
+2024-01-22 16:45:19,045 DEBUG   SystemMonitor:10502 [system_monitor.py:_start():183] Publishing last batch of metrics
+2024-01-22 16:45:19,049 INFO    HandlerThread:10502 [interfaces.py:finish():202] Joined disk monitor
+2024-01-22 16:45:19,050 INFO    HandlerThread:10502 [interfaces.py:finish():202] Joined gpuapple monitor
+2024-01-22 16:45:19,050 INFO    HandlerThread:10502 [interfaces.py:finish():202] Joined memory monitor
+2024-01-22 16:45:19,050 INFO    HandlerThread:10502 [interfaces.py:finish():202] Joined network monitor
+2024-01-22 16:45:19,050 DEBUG   SenderThread:10502 [sender.py:send_request():409] send_request: defer
+2024-01-22 16:45:19,050 INFO    SenderThread:10502 [sender.py:send_request_defer():613] handle sender defer: 2
+2024-01-22 16:45:19,050 INFO    SenderThread:10502 [sender.py:transition_state():617] send defer: 3
+2024-01-22 16:45:19,050 DEBUG   SenderThread:10502 [sender.py:send():382] send: telemetry
+2024-01-22 16:45:19,050 DEBUG   SenderThread:10502 [sender.py:send():382] send: stats
+2024-01-22 16:45:19,050 DEBUG   HandlerThread:10502 [handler.py:handle_request():146] handle_request: defer
+2024-01-22 16:45:19,051 INFO    HandlerThread:10502 [handler.py:handle_request_defer():172] handle defer: 3
+2024-01-22 16:45:19,051 DEBUG   SenderThread:10502 [sender.py:send_request():409] send_request: defer
+2024-01-22 16:45:19,051 INFO    SenderThread:10502 [sender.py:send_request_defer():613] handle sender defer: 3
+2024-01-22 16:45:19,051 INFO    SenderThread:10502 [sender.py:transition_state():617] send defer: 4
+2024-01-22 16:45:19,051 DEBUG   HandlerThread:10502 [handler.py:handle_request():146] handle_request: defer
+2024-01-22 16:45:19,051 INFO    HandlerThread:10502 [handler.py:handle_request_defer():172] handle defer: 4
+2024-01-22 16:45:19,377 INFO    wandb-upload_0:10502 [upload_job.py:push():131] Uploaded file /var/folders/fk/l5wyqpts4x95b329g_h14rd80000gn/T/tmpz8vvs51mwandb/cyix0eyh-wandb-metadata.json
+2024-01-22 16:45:19,758 INFO    Thread-12 :10502 [dir_watcher.py:_on_file_created():271] file/dir created: /Users/Henry_1/Documents/Part B/Career ML Stuff/meltingpot/wandb/run-20240122_164515-p4kktj9j/files/wandb-summary.json
+2024-01-22 16:45:19,758 INFO    Thread-12 :10502 [dir_watcher.py:_on_file_created():271] file/dir created: /Users/Henry_1/Documents/Part B/Career ML Stuff/meltingpot/wandb/run-20240122_164515-p4kktj9j/files/output.log
+2024-01-22 16:45:19,901 INFO    wandb-upload_1:10502 [upload_job.py:push():131] Uploaded file /var/folders/fk/l5wyqpts4x95b329g_h14rd80000gn/T/tmpz8vvs51mwandb/0vssa2js-diff.patch
+2024-01-22 16:45:19,901 INFO    wandb-upload_2:10502 [upload_job.py:push():131] Uploaded file /var/folders/fk/l5wyqpts4x95b329g_h14rd80000gn/T/tmpz8vvs51mwandb/sfi0kmnz-upstream_diff_d6847dc65f580a552b808ee50764bc8ccce8c44c.patch
+2024-01-22 16:45:20,765 INFO    Thread-12 :10502 [dir_watcher.py:_on_file_created():271] file/dir created: /Users/Henry_1/Documents/Part B/Career ML Stuff/meltingpot/wandb/run-20240122_164515-p4kktj9j/files/events.out.tfevents.1705941917.Henrys-MacBook-Pro-5.local.10487.0
+2024-01-22 16:45:21,210 INFO    wandb-upload_0:10502 [upload_job.py:push():131] Uploaded file /var/folders/fk/l5wyqpts4x95b329g_h14rd80000gn/T/tmpz8vvs51mwandb/h2w2rcmu-events.out.tfevents.1705941917.Henrys-MacBook-Pro-5.local.10487.0
+2024-01-22 16:45:21,766 INFO    Thread-12 :10502 [dir_watcher.py:_on_file_modified():288] file/dir modified: /Users/Henry_1/Documents/Part B/Career ML Stuff/meltingpot/wandb/run-20240122_164515-p4kktj9j/files/output.log
+2024-01-22 16:45:26,774 DEBUG   HandlerThread:10502 [handler.py:handle_request():146] handle_request: poll_exit
+2024-01-22 16:45:26,775 DEBUG   HandlerThread:10502 [handler.py:handle_request():146] handle_request: status_report
+2024-01-22 16:45:26,775 DEBUG   HandlerThread:10502 [handler.py:handle_request():146] handle_request: keepalive
+2024-01-22 16:45:26,775 DEBUG   HandlerThread:10502 [handler.py:handle_request():146] handle_request: status_report
+2024-01-22 16:45:26,775 DEBUG   SenderThread:10502 [sender.py:send_request():409] send_request: defer
+2024-01-22 16:45:26,775 INFO    SenderThread:10502 [sender.py:send_request_defer():613] handle sender defer: 4
+2024-01-22 16:45:26,775 INFO    SenderThread:10502 [sender.py:transition_state():617] send defer: 5
+2024-01-22 16:45:26,775 DEBUG   SenderThread:10502 [sender.py:send_request():409] send_request: poll_exit
+2024-01-22 16:45:26,775 DEBUG   HandlerThread:10502 [handler.py:handle_request():146] handle_request: defer
+2024-01-22 16:45:26,776 DEBUG   SenderThread:10502 [sender.py:send():382] send: files
+2024-01-22 16:45:26,776 INFO    HandlerThread:10502 [handler.py:handle_request_defer():172] handle defer: 5
+2024-01-22 16:45:26,776 INFO    SenderThread:10502 [sender.py:_save_file():1403] saving file events.out.tfevents.1705941917.Henrys-MacBook-Pro-5.local.10487.0 with policy live
+2024-01-22 16:45:26,776 DEBUG   SenderThread:10502 [sender.py:send():382] send: summary
+2024-01-22 16:45:26,777 INFO    SenderThread:10502 [sender.py:_save_file():1403] saving file wandb-summary.json with policy end
+2024-01-22 16:45:26,778 DEBUG   SenderThread:10502 [sender.py:send_request():409] send_request: defer
+2024-01-22 16:45:26,778 INFO    SenderThread:10502 [sender.py:send_request_defer():613] handle sender defer: 5
+2024-01-22 16:45:26,778 INFO    SenderThread:10502 [sender.py:transition_state():617] send defer: 6
+2024-01-22 16:45:26,778 DEBUG   HandlerThread:10502 [handler.py:handle_request():146] handle_request: defer
+2024-01-22 16:45:26,778 INFO    HandlerThread:10502 [handler.py:handle_request_defer():172] handle defer: 6
+2024-01-22 16:45:26,778 DEBUG   SenderThread:10502 [sender.py:send_request():409] send_request: defer
+2024-01-22 16:45:26,778 INFO    SenderThread:10502 [sender.py:send_request_defer():613] handle sender defer: 6
+2024-01-22 16:45:26,781 DEBUG   HandlerThread:10502 [handler.py:handle_request():146] handle_request: status_report
+2024-01-22 16:45:26,789 INFO    Thread-12 :10502 [dir_watcher.py:_on_file_modified():288] file/dir modified: /Users/Henry_1/Documents/Part B/Career ML Stuff/meltingpot/wandb/run-20240122_164515-p4kktj9j/files/wandb-summary.json
+2024-01-22 16:45:26,950 INFO    SenderThread:10502 [sender.py:transition_state():617] send defer: 7
+2024-01-22 16:45:26,950 DEBUG   HandlerThread:10502 [handler.py:handle_request():146] handle_request: defer
+2024-01-22 16:45:26,951 INFO    HandlerThread:10502 [handler.py:handle_request_defer():172] handle defer: 7
+2024-01-22 16:45:26,951 DEBUG   SenderThread:10502 [sender.py:send_request():409] send_request: defer
+2024-01-22 16:45:26,951 INFO    SenderThread:10502 [sender.py:send_request_defer():613] handle sender defer: 7
+2024-01-22 16:45:27,058 DEBUG   HandlerThread:10502 [handler.py:handle_request():146] handle_request: poll_exit
+2024-01-22 16:45:27,190 INFO    SenderThread:10502 [sender.py:transition_state():617] send defer: 8
+2024-01-22 16:45:27,190 DEBUG   SenderThread:10502 [sender.py:send_request():409] send_request: poll_exit
+2024-01-22 16:45:27,190 DEBUG   HandlerThread:10502 [handler.py:handle_request():146] handle_request: defer
+2024-01-22 16:45:27,191 INFO    HandlerThread:10502 [handler.py:handle_request_defer():172] handle defer: 8
+2024-01-22 16:45:27,191 DEBUG   SenderThread:10502 [sender.py:send_request():409] send_request: defer
+2024-01-22 16:45:27,191 INFO    SenderThread:10502 [sender.py:send_request_defer():613] handle sender defer: 8
+2024-01-22 16:45:27,191 INFO    SenderThread:10502 [job_builder.py:build():296] Attempting to build job artifact
+2024-01-22 16:45:27,192 INFO    SenderThread:10502 [job_builder.py:_get_source_type():426] is repo sourced job
+2024-01-22 16:45:27,192 INFO    SenderThread:10502 [sender.py:transition_state():617] send defer: 9
+2024-01-22 16:45:27,193 DEBUG   HandlerThread:10502 [handler.py:handle_request():146] handle_request: defer
+2024-01-22 16:45:27,193 INFO    HandlerThread:10502 [handler.py:handle_request_defer():172] handle defer: 9
+2024-01-22 16:45:27,193 DEBUG   SenderThread:10502 [sender.py:send_request():409] send_request: defer
+2024-01-22 16:45:27,193 INFO    SenderThread:10502 [sender.py:send_request_defer():613] handle sender defer: 9
+2024-01-22 16:45:27,193 INFO    SenderThread:10502 [dir_watcher.py:finish():358] shutting down directory watcher
+2024-01-22 16:45:27,789 INFO    Thread-12 :10502 [dir_watcher.py:_on_file_modified():288] file/dir modified: /Users/Henry_1/Documents/Part B/Career ML Stuff/meltingpot/wandb/run-20240122_164515-p4kktj9j/files/output.log
+2024-01-22 16:45:27,789 INFO    SenderThread:10502 [dir_watcher.py:_on_file_modified():288] file/dir modified: /Users/Henry_1/Documents/Part B/Career ML Stuff/meltingpot/wandb/run-20240122_164515-p4kktj9j/files/config.yaml
+2024-01-22 16:45:27,789 INFO    SenderThread:10502 [dir_watcher.py:finish():388] scan: /Users/Henry_1/Documents/Part B/Career ML Stuff/meltingpot/wandb/run-20240122_164515-p4kktj9j/files
+2024-01-22 16:45:27,790 INFO    SenderThread:10502 [dir_watcher.py:finish():402] scan save: /Users/Henry_1/Documents/Part B/Career ML Stuff/meltingpot/wandb/run-20240122_164515-p4kktj9j/files/events.out.tfevents.1705941917.Henrys-MacBook-Pro-5.local.10487.0 events.out.tfevents.1705941917.Henrys-MacBook-Pro-5.local.10487.0
+2024-01-22 16:45:27,790 INFO    SenderThread:10502 [dir_watcher.py:finish():402] scan save: /Users/Henry_1/Documents/Part B/Career ML Stuff/meltingpot/wandb/run-20240122_164515-p4kktj9j/files/diff.patch diff.patch
+2024-01-22 16:45:27,790 INFO    SenderThread:10502 [dir_watcher.py:finish():402] scan save: /Users/Henry_1/Documents/Part B/Career ML Stuff/meltingpot/wandb/run-20240122_164515-p4kktj9j/files/requirements.txt requirements.txt
+2024-01-22 16:45:27,790 INFO    SenderThread:10502 [dir_watcher.py:finish():402] scan save: /Users/Henry_1/Documents/Part B/Career ML Stuff/meltingpot/wandb/run-20240122_164515-p4kktj9j/files/output.log output.log
+2024-01-22 16:45:27,791 INFO    SenderThread:10502 [dir_watcher.py:finish():402] scan save: /Users/Henry_1/Documents/Part B/Career ML Stuff/meltingpot/wandb/run-20240122_164515-p4kktj9j/files/config.yaml config.yaml
+2024-01-22 16:45:27,791 INFO    SenderThread:10502 [dir_watcher.py:finish():402] scan save: /Users/Henry_1/Documents/Part B/Career ML Stuff/meltingpot/wandb/run-20240122_164515-p4kktj9j/files/wandb-summary.json wandb-summary.json
+2024-01-22 16:45:27,791 INFO    SenderThread:10502 [dir_watcher.py:finish():402] scan save: /Users/Henry_1/Documents/Part B/Career ML Stuff/meltingpot/wandb/run-20240122_164515-p4kktj9j/files/upstream_diff_d6847dc65f580a552b808ee50764bc8ccce8c44c.patch upstream_diff_d6847dc65f580a552b808ee50764bc8ccce8c44c.patch
+2024-01-22 16:45:27,791 INFO    SenderThread:10502 [dir_watcher.py:finish():402] scan save: /Users/Henry_1/Documents/Part B/Career ML Stuff/meltingpot/wandb/run-20240122_164515-p4kktj9j/files/wandb-metadata.json wandb-metadata.json
+2024-01-22 16:45:27,791 INFO    SenderThread:10502 [sender.py:transition_state():617] send defer: 10
+2024-01-22 16:45:27,791 DEBUG   HandlerThread:10502 [handler.py:handle_request():146] handle_request: defer
+2024-01-22 16:45:27,791 INFO    HandlerThread:10502 [handler.py:handle_request_defer():172] handle defer: 10
+2024-01-22 16:45:27,794 DEBUG   SenderThread:10502 [sender.py:send_request():409] send_request: defer
+2024-01-22 16:45:27,794 INFO    SenderThread:10502 [sender.py:send_request_defer():613] handle sender defer: 10
+2024-01-22 16:45:27,794 INFO    SenderThread:10502 [file_pusher.py:finish():175] shutting down file pusher
+2024-01-22 16:45:28,059 DEBUG   HandlerThread:10502 [handler.py:handle_request():146] handle_request: poll_exit
+2024-01-22 16:45:28,060 DEBUG   SenderThread:10502 [sender.py:send_request():409] send_request: poll_exit
+2024-01-22 16:45:28,115 INFO    wandb-upload_2:10502 [upload_job.py:push():131] Uploaded file /Users/Henry_1/Documents/Part B/Career ML Stuff/meltingpot/wandb/run-20240122_164515-p4kktj9j/files/requirements.txt
+2024-01-22 16:45:28,223 INFO    wandb-upload_1:10502 [upload_job.py:push():131] Uploaded file /Users/Henry_1/Documents/Part B/Career ML Stuff/meltingpot/wandb/run-20240122_164515-p4kktj9j/files/wandb-summary.json
+2024-01-22 16:45:28,299 INFO    wandb-upload_0:10502 [upload_job.py:push():131] Uploaded file /Users/Henry_1/Documents/Part B/Career ML Stuff/meltingpot/wandb/run-20240122_164515-p4kktj9j/files/config.yaml
+2024-01-22 16:45:28,300 INFO    wandb-upload_3:10502 [upload_job.py:push():131] Uploaded file /Users/Henry_1/Documents/Part B/Career ML Stuff/meltingpot/wandb/run-20240122_164515-p4kktj9j/files/output.log
+2024-01-22 16:45:28,502 INFO    Thread-11 (_thread_body):10502 [sender.py:transition_state():617] send defer: 11
+2024-01-22 16:45:28,502 DEBUG   HandlerThread:10502 [handler.py:handle_request():146] handle_request: defer
+2024-01-22 16:45:28,503 INFO    HandlerThread:10502 [handler.py:handle_request_defer():172] handle defer: 11
+2024-01-22 16:45:28,503 DEBUG   SenderThread:10502 [sender.py:send_request():409] send_request: defer
+2024-01-22 16:45:28,503 INFO    SenderThread:10502 [sender.py:send_request_defer():613] handle sender defer: 11
+2024-01-22 16:45:28,503 INFO    SenderThread:10502 [file_pusher.py:join():181] waiting for file pusher
+2024-01-22 16:45:28,503 INFO    SenderThread:10502 [sender.py:transition_state():617] send defer: 12
+2024-01-22 16:45:28,503 DEBUG   HandlerThread:10502 [handler.py:handle_request():146] handle_request: defer
+2024-01-22 16:45:28,503 INFO    HandlerThread:10502 [handler.py:handle_request_defer():172] handle defer: 12
+2024-01-22 16:45:28,503 DEBUG   SenderThread:10502 [sender.py:send_request():409] send_request: defer
+2024-01-22 16:45:28,503 INFO    SenderThread:10502 [sender.py:send_request_defer():613] handle sender defer: 12
+2024-01-22 16:45:28,503 INFO    SenderThread:10502 [file_stream.py:finish():595] file stream finish called
+2024-01-22 16:45:28,749 INFO    SenderThread:10502 [file_stream.py:finish():599] file stream finish is done
+2024-01-22 16:45:28,749 INFO    SenderThread:10502 [sender.py:transition_state():617] send defer: 13
+2024-01-22 16:45:28,749 DEBUG   HandlerThread:10502 [handler.py:handle_request():146] handle_request: defer
+2024-01-22 16:45:28,750 INFO    HandlerThread:10502 [handler.py:handle_request_defer():172] handle defer: 13
+2024-01-22 16:45:28,750 DEBUG   SenderThread:10502 [sender.py:send_request():409] send_request: defer
+2024-01-22 16:45:28,750 INFO    SenderThread:10502 [sender.py:send_request_defer():613] handle sender defer: 13
+2024-01-22 16:45:28,750 INFO    SenderThread:10502 [sender.py:transition_state():617] send defer: 14
+2024-01-22 16:45:28,750 DEBUG   HandlerThread:10502 [handler.py:handle_request():146] handle_request: defer
+2024-01-22 16:45:28,750 INFO    HandlerThread:10502 [handler.py:handle_request_defer():172] handle defer: 14
+2024-01-22 16:45:28,750 DEBUG   SenderThread:10502 [sender.py:send():382] send: final
+2024-01-22 16:45:28,750 DEBUG   SenderThread:10502 [sender.py:send():382] send: footer
+2024-01-22 16:45:28,751 DEBUG   SenderThread:10502 [sender.py:send_request():409] send_request: defer
+2024-01-22 16:45:28,751 INFO    SenderThread:10502 [sender.py:send_request_defer():613] handle sender defer: 14
+2024-01-22 16:45:28,751 DEBUG   HandlerThread:10502 [handler.py:handle_request():146] handle_request: poll_exit
+2024-01-22 16:45:28,752 DEBUG   SenderThread:10502 [sender.py:send_request():409] send_request: poll_exit
+2024-01-22 16:45:28,752 DEBUG   HandlerThread:10502 [handler.py:handle_request():146] handle_request: poll_exit
+2024-01-22 16:45:28,753 DEBUG   HandlerThread:10502 [handler.py:handle_request():146] handle_request: server_info
+2024-01-22 16:45:28,753 DEBUG   HandlerThread:10502 [handler.py:handle_request():146] handle_request: get_summary
+2024-01-22 16:45:28,753 DEBUG   HandlerThread:10502 [handler.py:handle_request():146] handle_request: sampled_history
+2024-01-22 16:45:28,754 DEBUG   HandlerThread:10502 [handler.py:handle_request():146] handle_request: internal_messages
+2024-01-22 16:45:28,754 DEBUG   SenderThread:10502 [sender.py:send_request():409] send_request: poll_exit
+2024-01-22 16:45:28,754 DEBUG   SenderThread:10502 [sender.py:send_request():409] send_request: server_info
+2024-01-22 16:45:28,756 DEBUG   HandlerThread:10502 [handler.py:handle_request():146] handle_request: job_info
+2024-01-22 16:45:28,936 DEBUG   SenderThread:10502 [sender.py:send_request():409] send_request: job_info
+2024-01-22 16:45:28,936 INFO    MainThread:10502 [wandb_run.py:_footer_history_summary_info():3857] rendering history
+2024-01-22 16:45:28,936 INFO    MainThread:10502 [wandb_run.py:_footer_history_summary_info():3889] rendering summary
+2024-01-22 16:45:28,937 INFO    MainThread:10502 [wandb_run.py:_footer_sync_info():3816] logging synced files
+2024-01-22 16:45:28,937 DEBUG   HandlerThread:10502 [handler.py:handle_request():146] handle_request: shutdown
+2024-01-22 16:45:28,937 INFO    HandlerThread:10502 [handler.py:finish():869] shutting down handler
+2024-01-22 16:45:29,761 INFO    WriterThread:10502 [datastore.py:close():296] close: /Users/Henry_1/Documents/Part B/Career ML Stuff/meltingpot/wandb/run-20240122_164515-p4kktj9j/run-p4kktj9j.wandb
+2024-01-22 16:45:29,941 INFO    SenderThread:10502 [sender.py:finish():1572] shutting down sender
+2024-01-22 16:45:29,942 INFO    SenderThread:10502 [file_pusher.py:finish():175] shutting down file pusher
+2024-01-22 16:45:29,942 INFO    SenderThread:10502 [file_pusher.py:join():181] waiting for file pusher

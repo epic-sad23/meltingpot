@@ -1,0 +1,48 @@
+{
+    "os": "macOS-12.6-arm64-arm-64bit",
+    "python": "3.11.5",
+    "heartbeatAt": "2024-01-22T18:06:54.764296",
+    "startedAt": "2024-01-22T18:06:54.230467",
+    "docker": null,
+    "cuda": null,
+    "args": [],
+    "state": "running",
+    "program": "-m examples.pettingzoo.cleanrl_train",
+    "codePathLocal": null,
+    "git": {
+        "remote": "https://github.com/hegasz/meltingpot",
+        "commit": "fa7f049d0a5f6ccdc7e6cb226604bde9f1ab16ff"
+    },
+    "email": "henry.gasztowtt@gmail.com",
+    "root": "/Users/Henry_1/Documents/Part B/Career ML Stuff/meltingpot",
+    "host": "Henrys-MacBook-Pro-5.local",
+    "username": "Henry",
+    "executable": "/Users/Henry_1/miniconda3/bin/python3",
+    "cpu_count": 8,
+    "cpu_count_logical": 8,
+    "cpu_freq": {
+        "current": 3228,
+        "min": 600,
+        "max": 3228
+    },
+    "cpu_freq_per_core": [
+        {
+            "current": 3228,
+            "min": 600,
+            "max": 3228
+        }
+    ],
+    "disk": {
+        "/": {
+            "total": 460.4317207336426,
+            "used": 21.778568267822266
+        }
+    },
+    "gpuapple": {
+        "type": "arm",
+        "vendor": "Apple"
+    },
+    "memory": {
+        "total": 16.0
+    }
+}

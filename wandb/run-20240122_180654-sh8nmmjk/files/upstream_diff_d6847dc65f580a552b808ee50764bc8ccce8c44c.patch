@@ -1,0 +1,1778 @@
+diff --git a/.gitignore b/.gitignore
+index ae3eb2e..102b5a1 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -1,6 +1,10 @@
++runs
+ # MacOS metadata.
+ .DS_Store
+ 
++# VS Code
++.vscode
++
+ # Byte-compiled Python code.
+ *.py[cod]
+ __pycache__/
+diff --git a/.vscode/launch.json b/.vscode/launch.json
+new file mode 100644
+index 0000000..23e4437
+--- /dev/null
++++ b/.vscode/launch.json
+@@ -0,0 +1,45 @@
++{
++  // Use IntelliSense to learn about possible attributes.
++  // Hover to view descriptions of existing attributes.
++  // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
++  "version": "0.2.0",
++  "configurations": [
++    {
++      "name": "Python: cleanrl",
++      "type": "python",
++      "request": "launch",
++      "module": "examples.pettingzoo.cleanrl_train",
++      "justMyCode": true
++    },
++    {
++      "name": "Python: Module",
++      "type": "python",
++      "request": "launch",
++      "module": "examples.pettingzoo.sb3_train",
++      "justMyCode": true
++    },
++    {
++      "name": "Python: Current File",
++      "type": "python",
++      "request": "launch",
++      "program": "${file}",
++      "console": "integratedTerminal",
++      "justMyCode": true
++    },
++    {
++      "name": "Docker: Python - General",
++      "type": "docker",
++      "request": "launch",
++      "preLaunchTask": "docker-run: debug",
++      "python": {
++        "pathMappings": [
++          {
++            "localRoot": "${workspaceFolder}",
++            "remoteRoot": "/app"
++          }
++        ],
++        "projectType": "general"
++      }
++    }
++  ]
++}
+diff --git a/.vscode/settings.json b/.vscode/settings.json
+index bf615ee..df7aeb9 100644
+--- a/.vscode/settings.json
++++ b/.vscode/settings.json
+@@ -40,7 +40,7 @@
+   "[python]": {
+     "editor.defaultFormatter": "ms-python.black-formatter",
+     "editor.codeActionsOnSave": {
+-      "source.organizeImports": true
++      "source.organizeImports": "explicit"
+     }
+   },
+   "python.formatting.provider": "none",
+diff --git a/examples/pettingzoo/cleanrl_train.py b/examples/pettingzoo/cleanrl_train.py
+new file mode 100644
+index 0000000..ab40a5c
+--- /dev/null
++++ b/examples/pettingzoo/cleanrl_train.py
+@@ -0,0 +1,439 @@
++# docs and experiment results can be found at https://docs.cleanrl.dev/rl-algorithms/ppo/#ppo_pettingzoo_ma_ataripy
++import argparse
++from distutils.util import strtobool
++import importlib
++import os
++import random
++import time
++
++import gymnasium as gym
++from meltingpot import substrate
++import numpy as np
++import stable_baselines3
++import supersuit as ss
++import torch
++from torch.distributions.categorical import Categorical
++import torch.nn as nn
++import torch.optim as optim
++from torch.utils.tensorboard import SummaryWriter
++
++from . import utils
++
++
++def parse_args():
++    # fmt: off
++    parser = argparse.ArgumentParser()
++    parser.add_argument("--exp-name", type=str, default=os.path.basename(__file__).rstrip(".py"),
++        help="the name of this experiment")
++    parser.add_argument("--seed", type=int, default=1,
++        help="seed of the experiment")
++    parser.add_argument("--torch-deterministic", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
++        help="if toggled, `torch.backends.cudnn.deterministic=False`")
++    parser.add_argument("--cuda", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
++        help="if toggled, cuda will be enabled by default")
++    parser.add_argument("--track", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
++        help="if toggled, this experiment will be tracked with Weights and Biases")
++    parser.add_argument("--wandb-project-name", type=str, default="ppo",
++        help="the wandb's project name")
++    parser.add_argument("--wandb-entity", type=str, default=None,
++        help="the entity (team) of wandb's project")
++    parser.add_argument("--capture_video", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
++        help="whether to capture videos of the agent performances (check out `videos` folder)")
++
++    # Algorithm specific arguments
++    parser.add_argument("--env-id", type=str, default="harvest_open",
++        help="the id of the environment")
++    parser.add_argument("--total-timesteps", type=int, default=100000,
++        help="total timesteps of the experiments")
++    parser.add_argument("--learning-rate", type=float, default=1e-4,
++        help="the learning rate of the optimizer")
++    parser.add_argument("--num-envs", type=int, default=1,
++        help="the number of parallel game environments")
++    parser.add_argument("--num-steps", type=int, default=1000,
++        help="the number of steps to run in each environment per policy rollout")
++    parser.add_argument("--anneal-lr", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
++        help="Toggle learning rate annealing for policy and value networks")
++    parser.add_argument("--gamma", type=float, default=0.99,
++        help="the discount factor gamma")
++    parser.add_argument("--gae-lambda", type=float, default=0.95,
++        help="the lambda for the general advantage estimation")
++    parser.add_argument("--num-minibatches", type=int, default=4,
++        help="the number of mini-batches")
++    parser.add_argument("--update-epochs", type=int, default=4,
++        help="the K epochs to update the policy")
++    parser.add_argument("--norm-adv", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
++        help="Toggles advantages normalization")
++    parser.add_argument("--clip-coef", type=float, default=0.1,
++        help="the surrogate clipping coefficient")
++    parser.add_argument("--clip-vloss", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
++        help="Toggles whether or not to use a clipped loss for the value function, as per the paper.")
++    parser.add_argument("--ent-coef", type=float, default=0.01,
++        help="coefficient of the entropy")
++    parser.add_argument("--vf-coef", type=float, default=0.5,
++        help="coefficient of the value function")
++    parser.add_argument("--max-grad-norm", type=float, default=0.5,
++        help="the maximum norm for the gradient clipping")
++    parser.add_argument("--target-kl", type=float, default=None,
++        help="the target KL divergence threshold")
++    args = parser.parse_args()
++    args.batch_size = int(args.num_envs * args.num_steps)
++    args.minibatch_size = int(args.batch_size // args.num_minibatches)
++    # fmt: on
++    return args
++
++
++def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
++    torch.nn.init.orthogonal_(layer.weight, std)
++    torch.nn.init.constant_(layer.bias, bias_const)
++    return layer
++
++
++class Agent(nn.Module):
++    def __init__(self, envs):
++        super().__init__()
++        self.network = nn.Sequential(
++            layer_init(nn.Conv2d(envs.single_observation_space.shape[2], 32, 8, stride=4)),
++            nn.ReLU(),
++            layer_init(nn.Conv2d(32, 64, 4, stride=2)),
++            nn.ReLU(),
++            layer_init(nn.Conv2d(64, 64, 3, stride=1)),
++            nn.ReLU(),
++            nn.Flatten(),
++            layer_init(nn.Linear(64 * 7 * 7, 512)),
++            nn.ReLU(),
++        )
++        self.actor = layer_init(nn.Linear(512, envs.single_action_space.n), std=0.01)
++        self.critic = layer_init(nn.Linear(512, 1), std=1)
++
++    def get_value(self, x):
++        x = x.clone()
++        num_rgb_channels = 12
++        """
++        we only divide the 4 stack frames x 3 RGB channels - NOT the agent indicators
++        """
++        x[:, :, :, :num_rgb_channels] /= 255.0
++        return self.critic(self.network(x.permute((0, 3, 1, 2))))
++
++    def get_action_and_value(self, x, action=None):
++        """
++        x is an observation - in our case with shape 7x88x88x19
++        """
++        x = x.clone()
++        num_rgb_channels = 12
++        """
++        we only divide the 4 stack frames x 3 RGB channels - NOT the agent indicators
++        """
++        x[:, :, :, :num_rgb_channels] /= 255.0
++        hidden = self.network(x.permute((0, 3, 1, 2)))
++        logits = self.actor(hidden)
++        probs = Categorical(logits=logits)
++        if action is None:
++            action = probs.sample()
++        return action, probs.log_prob(action), probs.entropy(), self.critic(hidden)
++
++
++if __name__ == "__main__":
++    args = parse_args()
++    run_name = f"{args.env_id}__{args.exp_name}__{args.seed}__{int(time.time())}"
++    if args.track:
++        import wandb
++
++        wandb.init(
++            project=args.wandb_project_name,
++            entity=args.wandb_entity,
++            sync_tensorboard=True,
++            config=vars(args),
++            name=run_name,
++            monitor_gym=True,
++            save_code=True,
++        )
++    writer = SummaryWriter(f"runs/{run_name}")
++    writer.add_text(
++        "hyperparameters",
++        "|param|value|\n|-|-|\n%s" % ("\n".join([f"|{key}|{value}|" for key, value in vars(args).items()])),
++    )
++
++    # TRY NOT TO MODIFY: seeding
++    random.seed(args.seed)
++    np.random.seed(args.seed)
++    torch.manual_seed(args.seed)
++    torch.backends.cudnn.deterministic = args.torch_deterministic
++
++    device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
++
++    # env setup
++    # env = importlib.import_module(f"pettingzoo.atari.{args.env_id}").parallel_env()
++    # env = ss.max_observation_v0(env, 2)
++    # env = ss.frame_skip_v0(env, 4)
++    # env = ss.clip_reward_v0(env, lower_bound=-1, upper_bound=1)
++    # env = ss.color_reduction_v0(env, mode="B")
++    # env = ss.resize_v1(env, x_size=84, y_size=84)
++    # env = ss.frame_stack_v1(env, 4)
++    # env = ss.pettingzoo_env_to_vec_env_v1(env)
++    # envs = ss.concat_vec_envs_v1(env, args.num_envs // 2, num_cpus=0, base_class="gym")
++    # envs.single_observation_space = envs.observation_space
++    # envs.single_action_space = envs.action_space
++    # envs.is_vector_env = True
++    # envs = gym.wrappers.RecordEpisodeStatistics(envs)
++    # if args.capture_video:
++    #     envs = gym.wrappers.RecordVideo(envs, f"videos/{run_name}")
++
++
++    env_name = "commons_harvest__open"
++    env_config = substrate.get_config(env_name)
++    test_env_config = substrate.get_config(env_name)
++    num_cpus = 0  # number of cpus
++    num_frames = 4
++    model_path = None  # Replace this with a saved model
++
++    env = utils.parallel_env(
++        max_cycles=args.num_steps,
++        env_config=env_config,
++    )
++    test_env = utils.parallel_env(
++        max_cycles=args.num_steps,
++        env_config=test_env_config,
++    )
++    num_agents = env.max_num_agents
++
++    env.render_mode = "rgb_array"
++    test_env.render_mode = "rgb_array"
++
++
++    env = ss.observation_lambda_v0(env, lambda x, _: x["RGB"], lambda s: s["RGB"])
++    env = ss.frame_stack_v1(env, num_frames)
++    env = ss.agent_indicator_v0(env, type_only=False)
++    test_env = ss.observation_lambda_v0(test_env, lambda x, _: x["RGB"], lambda s: s["RGB"])
++    test_env = ss.frame_stack_v1(test_env, num_frames)
++    test_env = ss.agent_indicator_v0(test_env, type_only=False)
++    """
++    ^^^ added back in agent_indicator wrapper
++    Note this adds new channels!!!!
++    We have the original 12 channels for 3 RGB channels in 4 stacked frames
++    And we have 7 channels indicating which agent we are controlling (one-hot encoding)
++    """
++    env = ss.pettingzoo_env_to_vec_env_v1(env)
++    test_env = ss.pettingzoo_env_to_vec_env_v1(test_env)
++
++    envs = ss.concat_vec_envs_v1(
++        env,
++        num_vec_envs=args.num_envs,
++        num_cpus=num_cpus,
++        base_class="stable_baselines3")
++    test_envs = ss.concat_vec_envs_v1(
++        test_env,
++        num_vec_envs=args.num_envs,
++        num_cpus=num_cpus,
++        base_class="stable_baselines3")
++    """
++    gymnasium or sb3 base class? Main difference in reset() method:
++    # Note: SB3's vector envs return only observations on reset, and store infos in `self.reset_infos`
++    """
++
++    #envs = stable_baselines3.common.vec_env.VecVideoRecorder(envs, './videos', (lambda x: True), video_length=200, name_prefix='rl-video')
++
++
++    envs.single_observation_space = envs.observation_space
++    envs.single_action_space = envs.action_space
++    envs.is_vector_env = True
++    test_envs.is_vector_env = True
++
++    #envs = gym.wrappers.RecordEpisodeStatistics(envs)
++    #envs = gym.wrappers.RecordVideo(envs, f"videos/{run_name}")
++
++    """
++    single environment observations have dimensions 88x88x(12+7)
++    for 88x88 pixels in 3 RGB channels, multiplied by the frame stacking
++    plus the agent indicator channels
++
++    one observations of envs will have dimensions 7Nx88x88x(12+7) - where N is
++    the number of envs set in this file. This is because each env of the
++    commons harvest open substrate has 7 envs in it - one for each player.
++    i.e. env.num_envs = 7, and envs.num_envs = sum(env.num_envs for env in vec_envs).
++    """
++
++    eval_freq = 100000 // (args.num_envs * num_agents)
++
++    assert isinstance(envs.single_action_space, gym.spaces.Discrete), "only discrete action space is supported"
++
++    agent = Agent(envs).to(device)
++    optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=1e-5)
++
++    # ALGO Logic: Storage setup
++    obs = torch.zeros((args.num_steps, args.num_envs*num_agents) + envs.single_observation_space.shape).to(device)
++    """
++    we set the first dimension of obs to be the number of steps
++    we will then add observations to this by calling obs[step] = next_obvs
++    note each observation is thus 7x88x88x19 - whilst `obs` is 128x7x88x88x19
++    with that first dimension for storing all the steps (in each env) per policy rollout
++    """
++    actions = torch.zeros((args.num_steps, args.num_envs*num_agents) + envs.single_action_space.shape).to(device)
++    logprobs = torch.zeros((args.num_steps, args.num_envs*num_agents)).to(device)
++    rewards = torch.zeros((args.num_steps, args.num_envs*num_agents)).to(device)
++    dones = torch.zeros((args.num_steps, args.num_envs*num_agents)).to(device)
++    values = torch.zeros((args.num_steps, args.num_envs*num_agents)).to(device)
++
++    # TRY NOT TO MODIFY: start the game
++    global_step = 0
++    start_time = time.time()
++    """
++    seems that envs.reset() now returns a tuble with what we want first,
++    and then a list flattened_infos second. So I'm calling envs.reset()[0]
++    """
++    next_obs = torch.Tensor(envs.reset()).to(device)
++
++
++    next_done = torch.zeros(args.num_envs*num_agents).to(device)
++    num_updates = args.total_timesteps // args.batch_size
++    print(num_updates)
++    for update in range(1, num_updates + 1):
++        if(update % 3 == 1):
++          next_obs = torch.Tensor(test_envs.reset()).to(device)
++          total_reward = 0
++          for step in range(0, args.num_steps):
++            obs[step] = next_obs
++            dones[step] = next_done
++
++            # ALGO LOGIC: action logic
++            with torch.no_grad():
++                action, logprob, _, value = agent.get_action_and_value(next_obs)
++                values[step] = value.flatten()
++            actions[step] = action
++            logprobs[step] = logprob
++
++            # TRY NOT TO MODIFY: execute the game and log data.
++            next_obs, reward, done, info = test_envs.step(action.cpu().numpy())
++            total_reward += sum(reward)
++            rewards[step] = torch.tensor(reward).to(device).view(-1)
++            next_obs, next_done = torch.Tensor(next_obs).to(device), torch.Tensor(done).to(device)
++          print("update number " + str(update) + " total reward " + str(total_reward))
++          writer.add_scalar("charts/evaluation_reward", total_reward, global_step)
++
++
++        # Annealing the rate if instructed to do so.
++        if args.anneal_lr:
++            frac = 1.0 - (update - 1.0) / num_updates
++            lrnow = frac * args.learning_rate
++            optimizer.param_groups[0]["lr"] = lrnow
++
++        for step in range(0, args.num_steps):
++            global_step += 1 * args.num_envs
++            obs[step] = next_obs
++            dones[step] = next_done
++
++            # ALGO LOGIC: action logic
++            with torch.no_grad():
++                action, logprob, _, value = agent.get_action_and_value(next_obs)
++                values[step] = value.flatten()
++            actions[step] = action
++            logprobs[step] = logprob
++
++            # TRY NOT TO MODIFY: execute the game and log data.
++            next_obs, reward, done, info = envs.step(action.cpu().numpy())
++            rewards[step] = torch.tensor(reward).to(device).view(-1)
++            next_obs, next_done = torch.Tensor(next_obs).to(device), torch.Tensor(done).to(device)
++
++            for idx, item in enumerate(info):
++                player_idx = idx % 7
++                if "episode" in item.keys():
++                    print(f"global_step={global_step}, {player_idx}-episodic_return={item['episode']['r']}")
++                    writer.add_scalar(f"charts/episodic_return-player{player_idx}", item["episode"]["r"], global_step)
++                    writer.add_scalar(f"charts/episodic_length-player{player_idx}", item["episode"]["l"], global_step)
++
++        # bootstrap value if not done
++        with torch.no_grad():
++            next_value = agent.get_value(next_obs).reshape(1, -1)
++            advantages = torch.zeros_like(rewards).to(device)
++            lastgaelam = 0
++            for t in reversed(range(args.num_steps)):
++                if t == args.num_steps - 1:
++                    nextnonterminal = 1.0 - next_done
++                    nextvalues = next_value
++                else:
++                    nextnonterminal = 1.0 - dones[t + 1]
++                    nextvalues = values[t + 1]
++                delta = rewards[t] + args.gamma * nextvalues * nextnonterminal - values[t]
++                advantages[t] = lastgaelam = delta + args.gamma * args.gae_lambda * nextnonterminal * lastgaelam
++            returns = advantages + values
++
++        # flatten the batch
++        b_obs = obs.reshape((-1,) + envs.single_observation_space.shape)
++        b_logprobs = logprobs.reshape(-1)
++        b_actions = actions.reshape((-1,) + envs.single_action_space.shape)
++        b_advantages = advantages.reshape(-1)
++        b_returns = returns.reshape(-1)
++        b_values = values.reshape(-1)
++
++        # Optimizing the policy and value network
++        b_inds = np.arange(args.batch_size)
++        clipfracs = []
++        for epoch in range(args.update_epochs):
++            np.random.shuffle(b_inds)
++            for start in range(0, args.batch_size, args.minibatch_size):
++                end = start + args.minibatch_size
++                mb_inds = b_inds[start:end]
++
++                _, newlogprob, entropy, newvalue = agent.get_action_and_value(b_obs[mb_inds], b_actions.long()[mb_inds])
++                logratio = newlogprob - b_logprobs[mb_inds]
++                ratio = logratio.exp()
++
++                with torch.no_grad():
++                    # calculate approx_kl http://joschu.net/blog/kl-approx.html
++                    old_approx_kl = (-logratio).mean()
++                    approx_kl = ((ratio - 1) - logratio).mean()
++                    clipfracs += [((ratio - 1.0).abs() > args.clip_coef).float().mean().item()]
++
++                mb_advantages = b_advantages[mb_inds]
++                if args.norm_adv:
++                    mb_advantages = (mb_advantages - mb_advantages.mean()) / (mb_advantages.std() + 1e-8)
++
++                # Policy loss
++                pg_loss1 = -mb_advantages * ratio
++                pg_loss2 = -mb_advantages * torch.clamp(ratio, 1 - args.clip_coef, 1 + args.clip_coef)
++                pg_loss = torch.max(pg_loss1, pg_loss2).mean()
++
++                # Value loss
++                newvalue = newvalue.view(-1)
++                if args.clip_vloss:
++                    v_loss_unclipped = (newvalue - b_returns[mb_inds]) ** 2
++                    v_clipped = b_values[mb_inds] + torch.clamp(
++                        newvalue - b_values[mb_inds],
++                        -args.clip_coef,
++                        args.clip_coef,
++                    )
++                    v_loss_clipped = (v_clipped - b_returns[mb_inds]) ** 2
++                    v_loss_max = torch.max(v_loss_unclipped, v_loss_clipped)
++                    v_loss = 0.5 * v_loss_max.mean()
++                else:
++                    v_loss = 0.5 * ((newvalue - b_returns[mb_inds]) ** 2).mean()
++
++                entropy_loss = entropy.mean()
++                loss = pg_loss - args.ent_coef * entropy_loss + v_loss * args.vf_coef
++
++                optimizer.zero_grad()
++                loss.backward()
++                nn.utils.clip_grad_norm_(agent.parameters(), args.max_grad_norm)
++                optimizer.step()
++
++            if args.target_kl is not None:
++                if approx_kl > args.target_kl:
++                    break
++
++        y_pred, y_true = b_values.cpu().numpy(), b_returns.cpu().numpy()
++        var_y = np.var(y_true)
++        explained_var = np.nan if var_y == 0 else 1 - np.var(y_true - y_pred) / var_y
++
++        # TRY NOT TO MODIFY: record rewards for plotting purposes
++        writer.add_scalar("charts/learning_rate", optimizer.param_groups[0]["lr"], global_step)
++        writer.add_scalar("losses/value_loss", v_loss.item(), global_step)
++        writer.add_scalar("losses/policy_loss", pg_loss.item(), global_step)
++        writer.add_scalar("losses/entropy", entropy_loss.item(), global_step)
++        writer.add_scalar("losses/old_approx_kl", old_approx_kl.item(), global_step)
++        writer.add_scalar("losses/approx_kl", approx_kl.item(), global_step)
++        writer.add_scalar("losses/clipfrac", np.mean(clipfracs), global_step)
++        writer.add_scalar("losses/explained_variance", explained_var, global_step)
++        print("SPS:", int(global_step / (time.time() - start_time)))
++        writer.add_scalar("charts/SPS", int(global_step / (time.time() - start_time)), global_step)
++
++    envs.close()
++    writer.close()
+diff --git a/examples/pettingzoo/sb3_train.py b/examples/pettingzoo/sb3_train.py
+index d11b116..73830dd 100644
+--- a/examples/pettingzoo/sb3_train.py
++++ b/examples/pettingzoo/sb3_train.py
+@@ -116,6 +116,7 @@ def main():
+       max_cycles=rollout_len,
+       env_config=env_config,
+   )
++  env.render_mode = "rgb_array"
+   env = ss.observation_lambda_v0(env, lambda x, _: x["RGB"], lambda s: s["RGB"])
+   env = ss.frame_stack_v1(env, num_frames)
+   env = ss.pettingzoo_env_to_vec_env_v1(env)
+diff --git a/examples/pettingzoo/utils.py b/examples/pettingzoo/utils.py
+index d54923d..30aa027 100644
+--- a/examples/pettingzoo/utils.py
++++ b/examples/pettingzoo/utils.py
+@@ -50,7 +50,7 @@ class _MeltingPotPettingZooEnv(pettingzoo_utils.ParallelEnv):
+   def __init__(self, env_config, max_cycles):
+     self.env_config = config_dict.ConfigDict(env_config)
+     self.max_cycles = max_cycles
+-    self._env = substrate.build(
++    self._env = substrate.build_from_config(
+         self.env_config, roles=self.env_config.default_player_roles)
+     self._num_players = len(self._env.observation_spec())
+     self.possible_agents = [
+@@ -70,7 +70,7 @@ class _MeltingPotPettingZooEnv(pettingzoo_utils.ParallelEnv):
+   def state(self):
+     return self._env.observation()
+ 
+-  def reset(self, seed=None):
++  def reset(self, seed=None, options=None):
+     """See base class."""
+     timestep = self._env.reset()
+     self.agents = self.possible_agents[:]
+@@ -99,7 +99,12 @@ class _MeltingPotPettingZooEnv(pettingzoo_utils.ParallelEnv):
+     self._env.close()
+ 
+   def render(self, mode='human', filename=None):
+-    rgb_arr = self.state()['WORLD.RGB']
++    """
++    self.state() is a list of length 7 - for each player environment
++    We shall render just the first of these, i.e. self.state()[0]
++    """
++    #print(self.state())
++    rgb_arr = self.state()[0]['WORLD.RGB']
+     if mode == 'human':
+       plt.cla()
+       plt.imshow(rgb_arr, interpolation='nearest')
+diff --git a/examples/rllib/__init__.py b/examples/rllib/__init__.py
+deleted file mode 100644
+index 4ad7182..0000000
+--- a/examples/rllib/__init__.py
++++ /dev/null
+@@ -1,13 +0,0 @@
+-# Copyright 2023 DeepMind Technologies Limited.
+-#
+-# Licensed under the Apache License, Version 2.0 (the "License");
+-# you may not use this file except in compliance with the License.
+-# You may obtain a copy of the License at
+-#
+-#     https://www.apache.org/licenses/LICENSE-2.0
+-#
+-# Unless required by applicable law or agreed to in writing, software
+-# distributed under the License is distributed on an "AS IS" BASIS,
+-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-# See the License for the specific language governing permissions and
+-# limitations under the License.
+diff --git a/examples/rllib/self_play_train.py b/examples/rllib/self_play_train.py
+deleted file mode 100644
+index 496ea79..0000000
+--- a/examples/rllib/self_play_train.py
++++ /dev/null
+@@ -1,165 +0,0 @@
+-# Copyright 2020 DeepMind Technologies Limited.
+-#
+-# Licensed under the Apache License, Version 2.0 (the "License");
+-# you may not use this file except in compliance with the License.
+-# You may obtain a copy of the License at
+-#
+-#     https://www.apache.org/licenses/LICENSE-2.0
+-#
+-# Unless required by applicable law or agreed to in writing, software
+-# distributed under the License is distributed on an "AS IS" BASIS,
+-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-# See the License for the specific language governing permissions and
+-# limitations under the License.
+-"""Runs an example of a self-play training experiment."""
+-
+-import os
+-
+-from meltingpot import substrate
+-import ray
+-from ray import air
+-from ray import tune
+-from ray.rllib.algorithms import ppo
+-from ray.rllib.policy import policy
+-
+-from . import utils
+-
+-
+-def get_config(
+-    substrate_name: str = "bach_or_stravinsky_in_the_matrix__repeated",
+-    num_rollout_workers: int = 2,
+-    rollout_fragment_length: int = 100,
+-    train_batch_size: int = 6400,
+-    fcnet_hiddens=(64, 64),
+-    post_fcnet_hiddens=(256,),
+-    lstm_cell_size: int = 256,
+-    sgd_minibatch_size: int = 128,
+-):
+-  """Get the configuration for running an agent on a substrate using RLLib.
+-
+-  We need the following 2 pieces to run the training:
+-
+-  Args:
+-    substrate_name: The name of the MeltingPot substrate, coming from
+-      `substrate.AVAILABLE_SUBSTRATES`.
+-    num_rollout_workers: The number of workers for playing games.
+-    rollout_fragment_length: Unroll time for learning.
+-    train_batch_size: Batch size (batch * rollout_fragment_length)
+-    fcnet_hiddens: Fully connected layers.
+-    post_fcnet_hiddens: Layer sizes after the fully connected torso.
+-    lstm_cell_size: Size of the LSTM.
+-    sgd_minibatch_size: Size of the mini-batch for learning.
+-
+-  Returns:
+-    The configuration for running the experiment.
+-  """
+-  # Gets the default training configuration
+-  config = ppo.PPOConfig()
+-  # Number of arenas.
+-  config.num_rollout_workers = num_rollout_workers
+-  # This is to match our unroll lengths.
+-  config.rollout_fragment_length = rollout_fragment_length
+-  # Total (time x batch) timesteps on the learning update.
+-  config.train_batch_size = train_batch_size
+-  # Mini-batch size.
+-  config.sgd_minibatch_size = sgd_minibatch_size
+-  # Use the raw observations/actions as defined by the environment.
+-  config.preprocessor_pref = None
+-  # Use TensorFlow as the tensor framework.
+-  config = config.framework("tf")
+-  # Use GPUs iff `RLLIB_NUM_GPUS` env var set to > 0.
+-  config.num_gpus = int(os.environ.get("RLLIB_NUM_GPUS", "0"))
+-  config.log_level = "DEBUG"
+-
+-  # 2. Set environment config. This will be passed to
+-  # the env_creator function via the register env lambda below.
+-  player_roles = substrate.get_config(substrate_name).default_player_roles
+-  config.env_config = {"substrate": substrate_name, "roles": player_roles}
+-
+-  config.env = "meltingpot"
+-
+-  # 4. Extract space dimensions
+-  test_env = utils.env_creator(config.env_config)
+-
+-  # Setup PPO with policies, one per entry in default player roles.
+-  policies = {}
+-  player_to_agent = {}
+-  for i in range(len(player_roles)):
+-    rgb_shape = test_env.observation_space[f"player_{i}"]["RGB"].shape
+-    sprite_x = rgb_shape[0] // 8
+-    sprite_y = rgb_shape[1] // 8
+-
+-    policies[f"agent_{i}"] = policy.PolicySpec(
+-        policy_class=None,  # use default policy
+-        observation_space=test_env.observation_space[f"player_{i}"],
+-        action_space=test_env.action_space[f"player_{i}"],
+-        config={
+-            "model": {
+-                "conv_filters": [[16, [8, 8], 8],
+-                                 [128, [sprite_x, sprite_y], 1]],
+-            },
+-        })
+-    player_to_agent[f"player_{i}"] = f"agent_{i}"
+-
+-  def policy_mapping_fn(agent_id, **kwargs):
+-    del kwargs
+-    return player_to_agent[agent_id]
+-
+-  # 5. Configuration for multi-agent setup with one policy per role:
+-  config.multi_agent(policies=policies, policy_mapping_fn=policy_mapping_fn)
+-
+-  # 6. Set the agent architecture.
+-  # Definition of the model architecture.
+-  # The strides of the first convolutional layer were chosen to perfectly line
+-  # up with the sprites, which are 8x8.
+-  # The final layer must be chosen specifically so that its output is
+-  # [B, 1, 1, X]. See the explanation in
+-  # https://docs.ray.io/en/latest/rllib-models.html#built-in-models. It is
+-  # because rllib is unable to flatten to a vector otherwise.
+-  # The acb models used as baselines in the meltingpot paper were not run using
+-  # rllib, so they used a different configuration for the second convolutional
+-  # layer. It was 32 channels, [4, 4] kernel shape, and stride = 1.
+-  config.model["fcnet_hiddens"] = fcnet_hiddens
+-  config.model["fcnet_activation"] = "relu"
+-  config.model["conv_activation"] = "relu"
+-  config.model["post_fcnet_hiddens"] = post_fcnet_hiddens
+-  config.model["post_fcnet_activation"] = "relu"
+-  config.model["use_lstm"] = True
+-  config.model["lstm_use_prev_action"] = True
+-  config.model["lstm_use_prev_reward"] = False
+-  config.model["lstm_cell_size"] = lstm_cell_size
+-
+-  return config
+-
+-
+-def train(config, num_iterations=1):
+-  """Trains a model.
+-
+-  Args:
+-    config: model config
+-    num_iterations: number of iterations ot train for.
+-
+-  Returns:
+-    Training results.
+-  """
+-  tune.register_env("meltingpot", utils.env_creator)
+-  ray.init()
+-  stop = {
+-      "training_iteration": num_iterations,
+-  }
+-  return tune.Tuner(
+-      "PPO",
+-      param_space=config.to_dict(),
+-      run_config=air.RunConfig(stop=stop, verbose=1),
+-  ).fit()
+-
+-
+-def main():
+-  config = get_config()
+-  results = train(config, num_iterations=1)
+-  print(results)
+-  assert results.num_errors == 0
+-
+-
+-if __name__ == "__main__":
+-  main()
+diff --git a/examples/rllib/self_play_train_test.py b/examples/rllib/self_play_train_test.py
+deleted file mode 100644
+index 91de4a3..0000000
+--- a/examples/rllib/self_play_train_test.py
++++ /dev/null
+@@ -1,34 +0,0 @@
+-# Copyright 2020 DeepMind Technologies Limited.
+-#
+-# Licensed under the Apache License, Version 2.0 (the "License");
+-# you may not use this file except in compliance with the License.
+-# You may obtain a copy of the License at
+-#
+-#     https://www.apache.org/licenses/LICENSE-2.0
+-#
+-# Unless required by applicable law or agreed to in writing, software
+-# distributed under the License is distributed on an "AS IS" BASIS,
+-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-# See the License for the specific language governing permissions and
+-# limitations under the License.
+-"""Tests for the self_play_train.py."""
+-
+-from absl.testing import absltest
+-
+-from . import self_play_train
+-
+-
+-class TrainingTests(absltest.TestCase):
+-  """Tests for MeltingPotEnv for RLLib."""
+-
+-  def test_training(self):
+-    config = self_play_train.get_config(
+-        num_rollout_workers=1,
+-        rollout_fragment_length=10,
+-        train_batch_size=20,
+-        sgd_minibatch_size=20,
+-        fcnet_hiddens=(4,),
+-        post_fcnet_hiddens=(4,),
+-        lstm_cell_size=2)
+-    results = self_play_train.train(config, num_iterations=1)
+-    self.assertEqual(results.num_errors, 0)
+diff --git a/examples/rllib/utils.py b/examples/rllib/utils.py
+deleted file mode 100644
+index 8aeadc4..0000000
+--- a/examples/rllib/utils.py
++++ /dev/null
+@@ -1,178 +0,0 @@
+-# Copyright 2020 DeepMind Technologies Limited.
+-#
+-# Licensed under the Apache License, Version 2.0 (the "License");
+-# you may not use this file except in compliance with the License.
+-# You may obtain a copy of the License at
+-#
+-#     https://www.apache.org/licenses/LICENSE-2.0
+-#
+-# Unless required by applicable law or agreed to in writing, software
+-# distributed under the License is distributed on an "AS IS" BASIS,
+-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-# See the License for the specific language governing permissions and
+-# limitations under the License.
+-"""MeltingPotEnv as a MultiAgentEnv wrapper to interface with RLLib."""
+-
+-from typing import Tuple
+-
+-import dm_env
+-import dmlab2d
+-from gymnasium import spaces
+-from meltingpot import substrate
+-from meltingpot.utils.policies import policy
+-from ml_collections import config_dict
+-import numpy as np
+-from ray.rllib import algorithms
+-from ray.rllib.env import multi_agent_env
+-from ray.rllib.policy import sample_batch
+-
+-from ..gym import utils
+-
+-PLAYER_STR_FORMAT = 'player_{index}'
+-
+-
+-class MeltingPotEnv(multi_agent_env.MultiAgentEnv):
+-  """An adapter between the Melting Pot substrates and RLLib MultiAgentEnv."""
+-
+-  def __init__(self, env: dmlab2d.Environment):
+-    """Initializes the instance.
+-
+-    Args:
+-      env: dmlab2d environment to wrap. Will be closed when this wrapper closes.
+-    """
+-    self._env = env
+-    self._num_players = len(self._env.observation_spec())
+-    self._ordered_agent_ids = [
+-        PLAYER_STR_FORMAT.format(index=index)
+-        for index in range(self._num_players)
+-    ]
+-    # RLLib requires environments to have the following member variables:
+-    # observation_space, action_space, and _agent_ids
+-    self._agent_ids = set(self._ordered_agent_ids)
+-    # RLLib expects a dictionary of agent_id to observation or action,
+-    # Melting Pot uses a tuple, so we convert
+-    self.observation_space = self._convert_spaces_tuple_to_dict(
+-        utils.spec_to_space(self._env.observation_spec()),
+-        remove_world_observations=True)
+-    self.action_space = self._convert_spaces_tuple_to_dict(
+-        utils.spec_to_space(self._env.action_spec()))
+-    super().__init__()
+-
+-  def reset(self, *args, **kwargs):
+-    """See base class."""
+-    timestep = self._env.reset()
+-    return utils.timestep_to_observations(timestep), {}
+-
+-  def step(self, action_dict):
+-    """See base class."""
+-    actions = [action_dict[agent_id] for agent_id in self._ordered_agent_ids]
+-    timestep = self._env.step(actions)
+-    rewards = {
+-        agent_id: timestep.reward[index]
+-        for index, agent_id in enumerate(self._ordered_agent_ids)
+-    }
+-    done = {'__all__': timestep.last()}
+-    info = {}
+-
+-    observations = utils.timestep_to_observations(timestep)
+-    return observations, rewards, done, done, info
+-
+-  def close(self):
+-    """See base class."""
+-    self._env.close()
+-
+-  def get_dmlab2d_env(self):
+-    """Returns the underlying DM Lab2D environment."""
+-    return self._env
+-
+-  # Metadata is required by the gym `Env` class that we are extending, to show
+-  # which modes the `render` method supports.
+-  metadata = {'render.modes': ['rgb_array']}
+-
+-  def render(self) -> np.ndarray:
+-    """Render the environment.
+-
+-    This allows you to set `record_env` in your training config, to record
+-    videos of gameplay.
+-
+-    Returns:
+-        np.ndarray: This returns a numpy.ndarray with shape (x, y, 3),
+-        representing RGB values for an x-by-y pixel image, suitable for turning
+-        into a video.
+-    """
+-    observation = self._env.observation()
+-    world_rgb = observation[0]['WORLD.RGB']
+-
+-    # RGB mode is used for recording videos
+-    return world_rgb
+-
+-  def _convert_spaces_tuple_to_dict(
+-      self,
+-      input_tuple: spaces.Tuple,
+-      remove_world_observations: bool = False) -> spaces.Dict:
+-    """Returns spaces tuple converted to a dictionary.
+-
+-    Args:
+-      input_tuple: tuple to convert.
+-      remove_world_observations: If True will remove non-player observations.
+-    """
+-    return spaces.Dict({
+-        agent_id: (utils.remove_world_observations_from_space(input_tuple[i])
+-                   if remove_world_observations else input_tuple[i])
+-        for i, agent_id in enumerate(self._ordered_agent_ids)
+-    })
+-
+-
+-def env_creator(env_config):
+-  """Outputs an environment for registering."""
+-  env_config = config_dict.ConfigDict(env_config)
+-  env = substrate.build(env_config['substrate'], roles=env_config['roles'])
+-  env = MeltingPotEnv(env)
+-  return env
+-
+-
+-class RayModelPolicy(policy.Policy[policy.State]):
+-  """Policy wrapping an RLLib model for inference.
+-
+-  Note: Currently only supports a single input, batching is not enabled
+-  """
+-
+-  def __init__(self,
+-               model: algorithms.Algorithm,
+-               policy_id: str = sample_batch.DEFAULT_POLICY_ID) -> None:
+-    """Initialize a policy instance.
+-
+-    Args:
+-      model: An rllib.trainer.Trainer checkpoint.
+-      policy_id: Which policy to use (if trained in multi_agent mode)
+-    """
+-    self._model = model
+-    self._prev_action = 0
+-    self._policy_id = policy_id
+-
+-  def step(self, timestep: dm_env.TimeStep,
+-           prev_state: policy.State) -> Tuple[int, policy.State]:
+-    """See base class."""
+-    observations = {
+-        key: value
+-        for key, value in timestep.observation.items()
+-        if 'WORLD' not in key
+-    }
+-
+-    action, state, _ = self._model.compute_single_action(
+-        observations,
+-        prev_state,
+-        policy_id=self._policy_id,
+-        prev_action=self._prev_action,
+-        prev_reward=timestep.reward)
+-
+-    self._prev_action = action
+-    return action, state
+-
+-  def initial_state(self) -> policy.State:
+-    """See base class."""
+-    self._prev_action = 0
+-    return self._model.get_policy(self._policy_id).get_initial_state()
+-
+-  def close(self) -> None:
+-    """See base class."""
+diff --git a/examples/rllib/utils_test.py b/examples/rllib/utils_test.py
+deleted file mode 100644
+index 2053b6e..0000000
+--- a/examples/rllib/utils_test.py
++++ /dev/null
+@@ -1,76 +0,0 @@
+-# Copyright 2020 DeepMind Technologies Limited.
+-#
+-# Licensed under the Apache License, Version 2.0 (the "License");
+-# you may not use this file except in compliance with the License.
+-# You may obtain a copy of the License at
+-#
+-#     https://www.apache.org/licenses/LICENSE-2.0
+-#
+-# Unless required by applicable law or agreed to in writing, software
+-# distributed under the License is distributed on an "AS IS" BASIS,
+-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-# See the License for the specific language governing permissions and
+-# limitations under the License.
+-"""Tests for utils.py."""
+-
+-from absl.testing import absltest
+-from gymnasium.spaces import discrete
+-from meltingpot import substrate
+-from meltingpot.configs.substrates import commons_harvest__open
+-
+-from . import utils
+-
+-
+-class MeltingPotEnvTests(absltest.TestCase):
+-  """Tests for MeltingPotEnv for RLLib."""
+-
+-  def setUp(self):
+-    super().setUp()
+-    # Create a new MeltingPotEnv for each test case
+-    env_config = substrate.get_config('commons_harvest__open')
+-    roles = env_config.default_player_roles
+-    self._num_players = len(roles)
+-    self._env = utils.env_creator({
+-        'substrate': 'commons_harvest__open',
+-        'roles': roles,
+-    })
+-
+-  def test_action_space_size(self):
+-    """Test the action space is the correct size."""
+-    actions_count = len(commons_harvest__open.ACTION_SET)
+-    env_action_space = self._env.action_space['player_1']
+-    self.assertEqual(env_action_space, discrete.Discrete(actions_count))
+-
+-  def test_reset_number_agents(self):
+-    """Test that reset() returns observations for all agents."""
+-    obs, _ = self._env.reset()
+-    self.assertLen(obs, self._num_players)
+-
+-  def test_step(self):
+-    """Test step() returns rewards for all agents."""
+-    self._env.reset()
+-
+-    # Create dummy actions
+-    actions = {}
+-    for player_idx in range(0, self._num_players):
+-      actions['player_' + str(player_idx)] = 1
+-
+-    # Step
+-    _, rewards, _, _, _ = self._env.step(actions)
+-
+-    # Check we have one reward per agent
+-    self.assertLen(rewards, self._num_players)
+-
+-  def test_render_modes_metadata(self):
+-    """Test that render modes are given in the metadata."""
+-    self.assertIn('rgb_array', self._env.metadata['render.modes'])
+-
+-  def test_render_rgb_array(self):
+-    """Test that render('rgb_array') returns the full world."""
+-    self._env.reset()
+-    render = self._env.render()
+-    self.assertEqual(render.shape, (144, 192, 3))
+-
+-
+-if __name__ == '__main__':
+-  absltest.main()
+diff --git a/examples/rllib/view_models.py b/examples/rllib/view_models.py
+deleted file mode 100644
+index c9b23c1..0000000
+--- a/examples/rllib/view_models.py
++++ /dev/null
+@@ -1,109 +0,0 @@
+-# Copyright 2020 DeepMind Technologies Limited.
+-#
+-# Licensed under the Apache License, Version 2.0 (the "License");
+-# you may not use this file except in compliance with the License.
+-# You may obtain a copy of the License at
+-#
+-#     https://www.apache.org/licenses/LICENSE-2.0
+-#
+-# Unless required by applicable law or agreed to in writing, software
+-# distributed under the License is distributed on an "AS IS" BASIS,
+-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-# See the License for the specific language governing permissions and
+-# limitations under the License.
+-"""Runs the bots trained in self_play_train.py and renders in pygame.
+-
+-You must provide experiment_state, expected to be
+-~/ray_results/PPO/experiment_state_YOUR_RUN_ID.json
+-"""
+-
+-import argparse
+-
+-import dm_env
+-from dmlab2d.ui_renderer import pygame
+-import numpy as np
+-from ray.rllib.algorithms.registry import get_trainer_class
+-from ray.tune.analysis.experiment_analysis import ExperimentAnalysis
+-from ray.tune.registry import register_env
+-
+-from . import utils
+-
+-
+-def main():
+-  parser = argparse.ArgumentParser(description=__doc__)
+-  parser.add_argument(
+-      "--experiment_state",
+-      type=str,
+-      default="~/ray_results/PPO",
+-      help="ray.tune experiment_state to load. The default setting will load"
+-      " the last training run created by self_play_train.py. If you want to use"
+-      " a specific run, provide a path, expected to be of the format "
+-      " ~/ray_results/PPO/experiment_state-DATETIME.json")
+-
+-  args = parser.parse_args()
+-
+-  agent_algorithm = "PPO"
+-
+-  register_env("meltingpot", utils.env_creator)
+-
+-  experiment = ExperimentAnalysis(
+-      args.experiment_state,
+-      default_metric="episode_reward_mean",
+-      default_mode="max")
+-
+-  config = experiment.best_config
+-  checkpoint_path = experiment.best_checkpoint
+-
+-  trainer = get_trainer_class(agent_algorithm)(config=config)
+-  trainer.restore(checkpoint_path)
+-
+-  # Create a new environment to visualise
+-  env = utils.env_creator(config["env_config"]).get_dmlab2d_env()
+-
+-  bots = [
+-      utils.RayModelPolicy(trainer, f"agent_{i}")
+-      for i in range(len(config["env_config"]["default_player_roles"]))
+-  ]
+-
+-  timestep = env.reset()
+-  states = [bot.initial_state() for bot in bots]
+-  actions = [0] * len(bots)
+-
+-  # Configure the pygame display
+-  scale = 4
+-  fps = 5
+-
+-  pygame.init()
+-  clock = pygame.time.Clock()
+-  pygame.display.set_caption("DM Lab2d")
+-  obs_spec = env.observation_spec()
+-  shape = obs_spec[0]["WORLD.RGB"].shape
+-  game_display = pygame.display.set_mode(
+-      (int(shape[1] * scale), int(shape[0] * scale)))
+-
+-  for _ in range(config["horizon"]):
+-    obs = timestep.observation[0]["WORLD.RGB"]
+-    obs = np.transpose(obs, (1, 0, 2))
+-    surface = pygame.surfarray.make_surface(obs)
+-    rect = surface.get_rect()
+-    surf = pygame.transform.scale(surface,
+-                                  (int(rect[2] * scale), int(rect[3] * scale)))
+-
+-    game_display.blit(surf, dest=(0, 0))
+-    pygame.display.update()
+-    clock.tick(fps)
+-
+-    for i, bot in enumerate(bots):
+-      timestep_bot = dm_env.TimeStep(
+-          step_type=timestep.step_type,
+-          reward=timestep.reward[i],
+-          discount=timestep.discount,
+-          observation=timestep.observation[i])
+-
+-      actions[i], states[i] = bot.step(timestep_bot, states[i])
+-
+-    timestep = env.step(actions)
+-
+-
+-if __name__ == "__main__":
+-  main()
+diff --git a/examples/tutorial/__init__.py b/examples/tutorial/__init__.py
+deleted file mode 100644
+index e073588..0000000
+--- a/examples/tutorial/__init__.py
++++ /dev/null
+@@ -1,13 +0,0 @@
+-# Copyright 2020 DeepMind Technologies Limited.
+-#
+-# Licensed under the Apache License, Version 2.0 (the "License");
+-# you may not use this file except in compliance with the License.
+-# You may obtain a copy of the License at
+-#
+-#     https://www.apache.org/licenses/LICENSE-2.0
+-#
+-# Unless required by applicable law or agreed to in writing, software
+-# distributed under the License is distributed on an "AS IS" BASIS,
+-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-# See the License for the specific language governing permissions and
+-# limitations under the License.
+diff --git a/examples/tutorial/harvest/__init__.py b/examples/tutorial/harvest/__init__.py
+deleted file mode 100644
+index e073588..0000000
+--- a/examples/tutorial/harvest/__init__.py
++++ /dev/null
+@@ -1,13 +0,0 @@
+-# Copyright 2020 DeepMind Technologies Limited.
+-#
+-# Licensed under the Apache License, Version 2.0 (the "License");
+-# you may not use this file except in compliance with the License.
+-# You may obtain a copy of the License at
+-#
+-#     https://www.apache.org/licenses/LICENSE-2.0
+-#
+-# Unless required by applicable law or agreed to in writing, software
+-# distributed under the License is distributed on an "AS IS" BASIS,
+-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-# See the License for the specific language governing permissions and
+-# limitations under the License.
+diff --git a/examples/tutorial/harvest/configs/__init__.py b/examples/tutorial/harvest/configs/__init__.py
+deleted file mode 100644
+index e073588..0000000
+--- a/examples/tutorial/harvest/configs/__init__.py
++++ /dev/null
+@@ -1,13 +0,0 @@
+-# Copyright 2020 DeepMind Technologies Limited.
+-#
+-# Licensed under the Apache License, Version 2.0 (the "License");
+-# you may not use this file except in compliance with the License.
+-# You may obtain a copy of the License at
+-#
+-#     https://www.apache.org/licenses/LICENSE-2.0
+-#
+-# Unless required by applicable law or agreed to in writing, software
+-# distributed under the License is distributed on an "AS IS" BASIS,
+-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-# See the License for the specific language governing permissions and
+-# limitations under the License.
+diff --git a/examples/tutorial/harvest/configs/environment/__init__.py b/examples/tutorial/harvest/configs/environment/__init__.py
+deleted file mode 100644
+index e073588..0000000
+--- a/examples/tutorial/harvest/configs/environment/__init__.py
++++ /dev/null
+@@ -1,13 +0,0 @@
+-# Copyright 2020 DeepMind Technologies Limited.
+-#
+-# Licensed under the Apache License, Version 2.0 (the "License");
+-# you may not use this file except in compliance with the License.
+-# You may obtain a copy of the License at
+-#
+-#     https://www.apache.org/licenses/LICENSE-2.0
+-#
+-# Unless required by applicable law or agreed to in writing, software
+-# distributed under the License is distributed on an "AS IS" BASIS,
+-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-# See the License for the specific language governing permissions and
+-# limitations under the License.
+diff --git a/examples/tutorial/harvest/configs/environment/harvest.py b/examples/tutorial/harvest/configs/environment/harvest.py
+deleted file mode 100644
+index 789ef92..0000000
+--- a/examples/tutorial/harvest/configs/environment/harvest.py
++++ /dev/null
+@@ -1,46 +0,0 @@
+-# Copyright 2020 DeepMind Technologies Limited.
+-#
+-# Licensed under the Apache License, Version 2.0 (the "License");
+-# you may not use this file except in compliance with the License.
+-# You may obtain a copy of the License at
+-#
+-#     https://www.apache.org/licenses/LICENSE-2.0
+-#
+-# Unless required by applicable law or agreed to in writing, software
+-# distributed under the License is distributed on an "AS IS" BASIS,
+-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-# See the License for the specific language governing permissions and
+-# limitations under the License.
+-"""Configuration for tutorial level: Harvest."""
+-
+-from ml_collections import config_dict
+-
+-
+-def get_config():
+-  """Default configuration for the Harvest level."""
+-  config = config_dict.ConfigDict()
+-
+-  # Basic configuration.
+-  config.individual_observation_names = []
+-  config.global_observation_names = ["WORLD.RGB"]
+-
+-  # Lua script configuration.
+-  config.lab2d_settings = {
+-      "levelName":
+-          "harvest",
+-      "levelDirectory":
+-          "examples/tutorial/harvest/levels",
+-      "maxEpisodeLengthFrames":
+-          100,
+-      "numPlayers":
+-          0,
+-      "spriteSize":
+-          8,
+-      "simulation": {
+-          "map": " ",
+-          "prefabs": {},
+-          "charPrefabMap": {},
+-      },
+-  }
+-
+-  return config
+diff --git a/examples/tutorial/harvest/configs/environment/harvest_finished.py b/examples/tutorial/harvest/configs/environment/harvest_finished.py
+deleted file mode 100644
+index 7b40d65..0000000
+--- a/examples/tutorial/harvest/configs/environment/harvest_finished.py
++++ /dev/null
+@@ -1,227 +0,0 @@
+-# Copyright 2020 DeepMind Technologies Limited.
+-#
+-# Licensed under the Apache License, Version 2.0 (the "License");
+-# you may not use this file except in compliance with the License.
+-# You may obtain a copy of the License at
+-#
+-#     https://www.apache.org/licenses/LICENSE-2.0
+-#
+-# Unless required by applicable law or agreed to in writing, software
+-# distributed under the License is distributed on an "AS IS" BASIS,
+-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-# See the License for the specific language governing permissions and
+-# limitations under the License.
+-"""Configuration for finished tutorial level: Harvest."""
+-
+-from meltingpot.utils.substrates import shapes
+-from ml_collections import config_dict
+-
+-SPAWN_POINT = {
+-    "name": "spawn_point",
+-    "components": [
+-        {
+-            "component": "StateManager",
+-            "kwargs": {
+-                "initialState": "spawnPoint",
+-                "stateConfigs": [{
+-                    "state": "spawnPoint",
+-                    "groups": ["spawnPoints"],
+-                }],
+-            }
+-        },
+-        {
+-            "component": "Transform",
+-        },
+-    ]
+-}
+-
+-AVATAR = {
+-    "name": "avatar",
+-    "components": [
+-        {
+-            "component": "StateManager",
+-            "kwargs": {
+-                "initialState": "player",
+-                "stateConfigs": [
+-                    {"state": "player",
+-                     "layer": "upperPhysical",
+-                     "contact": "avatar",
+-                     "sprite": "Avatar",},
+-                ]
+-            }
+-        },
+-        {
+-            "component": "Transform",
+-        },
+-        {
+-            "component": "Appearance",
+-            "kwargs": {
+-                "renderMode": "ascii_shape",
+-                "spriteNames": ["Avatar"],
+-                "spriteShapes": [shapes.CUTE_AVATAR],
+-                "palettes": [{}],  # Will be overridden
+-                "noRotates": [True],
+-            }
+-        },
+-        {
+-            "component": "Avatar",
+-            "kwargs": {
+-                "aliveState": "player",
+-                "waitState": "playerWait",
+-                "spawnGroup": "spawnPoints",
+-                "view": {
+-                    "left": 3,
+-                    "right": 3,
+-                    "forward": 5,
+-                    "backward": 1,
+-                    "centered": False,
+-                }
+-            }
+-        },
+-    ]
+-}
+-
+-
+-WALL = {
+-    "name": "wall",
+-    "components": [
+-        {
+-            "component": "StateManager",
+-            "kwargs": {
+-                "initialState": "wall",
+-                "stateConfigs": [{
+-                    "state": "wall",
+-                    "layer": "upperPhysical",
+-                    "sprite": "Wall",
+-                }],
+-            }
+-        },
+-        {
+-            "component": "Transform",
+-        },
+-        {
+-            "component": "Appearance",
+-            "kwargs": {
+-                "renderMode": "ascii_shape",
+-                "spriteNames": ["Wall",],
+-                "spriteShapes": [shapes.WALL],
+-                "palettes": [shapes.WALL_PALETTE],
+-                "noRotates": [True],
+-            }
+-        },
+-        {
+-            "component": "BeamBlocker",
+-            "kwargs": {
+-                "beamType": "gift"
+-            }
+-        },
+-        {
+-            "component": "BeamBlocker",
+-            "kwargs": {
+-                "beamType": "zap"
+-            }
+-        },
+-    ]
+-}
+-
+-APPLE = {
+-    "name": "apple",
+-    "components": [
+-        {
+-            "component": "StateManager",
+-            "kwargs": {
+-                "initialState": "apple",
+-                "stateConfigs": [{
+-                    "state": "apple",
+-                    "layer": "lowerPhysical",
+-                    "sprite": "Apple",
+-                }, {
+-                    "state": "appleWait",
+-                }],
+-            }
+-        },
+-        {
+-            "component": "Transform",
+-        },
+-        {
+-            "component": "Appearance",
+-            "kwargs": {
+-                "renderMode": "ascii_shape",
+-                "spriteNames": ["Apple",],
+-                "spriteShapes": [shapes.LEGACY_APPLE],
+-                "palettes": [shapes.GREEN_COIN_PALETTE],
+-                "noRotates": [True],
+-            }
+-        },
+-        {
+-            "component": "Edible",
+-            "kwargs": {
+-                "liveState": "apple",
+-                "waitState": "appleWait",
+-                "rewardForEating": 1.0,
+-            }
+-        },
+-        {
+-            "component": "DensityRegrow",
+-            "kwargs": {
+-                "liveState": "apple",
+-                "waitState": "appleWait",
+-                "baseRate": 0.01,
+-            }
+-        },
+-    ]
+-}
+-
+-
+-def get_config():
+-  """Default configuration for the Harvest level."""
+-  config = config_dict.ConfigDict()
+-
+-  # Basic configuration.
+-  config.individual_observation_names = ["RGB"]
+-  config.global_observation_names = ["WORLD.RGB"]
+-
+-  ascii_map = """
+-**********************
+-*      AAA       AAA *
+-* AAA   A   AAA   A  *
+-*AAAAA  _  AAAAA  _  *
+-* AAA       AAA      *
+-*      AAA       AAA *
+-*     AAAAA  _  AAAAA*
+-*      AAA       AAA *
+-*  A         A       *
+-* AAA   _   AAA   _  *
+-**********************
+-  """
+-
+-  # Lua script configuration.
+-  config.lab2d_settings = {
+-      "levelName":
+-          "harvest_finished",
+-      "levelDirectory":
+-          "examples/tutorial/harvest/levels",
+-      "maxEpisodeLengthFrames":
+-          1000,
+-      "numPlayers":
+-          5,
+-      "spriteSize":
+-          8,
+-      "simulation": {
+-          "map": ascii_map,
+-          "prefabs": {
+-              "avatar": AVATAR,
+-              "spawn_point": SPAWN_POINT,
+-              "wall": WALL,
+-              "apple": APPLE,
+-          },
+-          "charPrefabMap": {
+-              "_": "spawn_point",
+-              "*": "wall",
+-              "A": "apple"
+-          },
+-          "playerPalettes": [],
+-      },
+-  }
+-
+-  return config
+diff --git a/examples/tutorial/harvest/levels/harvest/init.lua b/examples/tutorial/harvest/levels/harvest/init.lua
+deleted file mode 100644
+index 7f943d6..0000000
+--- a/examples/tutorial/harvest/levels/harvest/init.lua
++++ /dev/null
+@@ -1,29 +0,0 @@
+---[[ Copyright 2020 DeepMind Technologies Limited.
+-
+-Licensed under the Apache License, Version 2.0 (the "License");
+-you may not use this file except in compliance with the License.
+-You may obtain a copy of the License at
+-
+-    https://www.apache.org/licenses/LICENSE-2.0
+-
+-Unless required by applicable law or agreed to in writing, software
+-distributed under the License is distributed on an "AS IS" BASIS,
+-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-See the License for the specific language governing permissions and
+-limitations under the License.
+-]]
+--- Entry point lua file for the Harvest level.
+-
+-local meltingpot = 'meltingpot.lua.modules.'
+-local api_factory = require(meltingpot .. 'api_factory')
+-local simulation = require(meltingpot .. 'base_simulation')
+-
+--- Required to be able to use the components in the level
+-local component_library = require(meltingpot .. 'component_library')
+-local avatar_library = require(meltingpot .. 'avatar_library')
+-
+-return api_factory.apiFactory{
+-    Simulation = simulation.BaseSimulation,
+-    settings = {
+-    }
+-}
+diff --git a/examples/tutorial/harvest/levels/harvest_finished/components.lua b/examples/tutorial/harvest/levels/harvest_finished/components.lua
+deleted file mode 100644
+index adb4ed5..0000000
+--- a/examples/tutorial/harvest/levels/harvest_finished/components.lua
++++ /dev/null
+@@ -1,84 +0,0 @@
+---[[ Copyright 2020 DeepMind Technologies Limited.
+-
+-Licensed under the Apache License, Version 2.0 (the "License");
+-you may not use this file except in compliance with the License.
+-You may obtain a copy of the License at
+-
+-    https://www.apache.org/licenses/LICENSE-2.0
+-
+-Unless required by applicable law or agreed to in writing, software
+-distributed under the License is distributed on an "AS IS" BASIS,
+-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-See the License for the specific language governing permissions and
+-limitations under the License.
+-]]
+-local args = require 'common.args'
+-local class = require 'common.class'
+-local helpers = require 'common.helpers'
+-local log = require 'common.log'
+-local random = require 'system.random'
+-local meltingpot = 'meltingpot.lua.modules.'
+-local component = require(meltingpot .. 'component')
+-local component_registry = require(meltingpot .. 'component_registry')
+-
+-
+--- DensityRegrow makes the containing GameObject switch from `waitState` to
+--- `liveState` at a rate based on the number of surrounding objects in
+--- `liveState` and the configured `baseRate`.
+-local DensityRegrow = class.Class(component.Component)
+-
+-function DensityRegrow:__init__(kwargs)
+-  kwargs = args.parse(kwargs, {
+-      {'name', args.default('DensityRegrow')},
+-      -- `baseRate` indicates the base probability per frame of switching from
+-      -- wait state to live state.
+-      {'baseRate', args.ge(0.0), args.le(1.0)},
+-      -- The name of the state representing the active or alive state.
+-      {'liveState', args.stringType},
+-      -- The name of the state representing the inactive or dormans state.
+-      {'waitState', args.stringType},
+-      -- The radius of the neighborhood
+-      {'neighborhoodRadius', args.numberType, args.default(1)},
+-      -- The layer to query for objects in `liveState`
+-      {'queryLayer', args.stringType, args.default("lowerPhysical")},
+-  })
+-  DensityRegrow.Base.__init__(self, kwargs)
+-
+-  self._config.baseRate = kwargs.baseRate
+-  self._config.liveState = kwargs.liveState
+-  self._config.waitState = kwargs.waitState
+-  self._config.neighborhoodRadius = kwargs.neighborhoodRadius
+-  self._config.queryLayer = kwargs.queryLayer
+-end
+-
+-function DensityRegrow:registerUpdaters(updaterRegistry)
+-  updaterRegistry:registerUpdater{
+-      state = self._config.waitState,
+-      updateFn = function()
+-          local transform = self.gameObject:getComponent("Transform")
+-          -- Get neighbors
+-          local objects = transform:queryDiamond(
+-              self._config.queryLayer, self._config.neighborhoodRadius)
+-          -- Count live neighbors
+-          local liveNeighbors = 0
+-          for _, object in pairs(objects) do
+-            if object:getState() == self._config.liveState then
+-              liveNeighbors = liveNeighbors + 1
+-            end
+-          end
+-          local actualRate = liveNeighbors * self._config.baseRate
+-          if random:uniformReal(0, 1) < actualRate then
+-            self.gameObject:setState(self._config.liveState)
+-          end
+-        end,
+-  }
+-end
+-
+-
+-local allComponents = {
+-    DensityRegrow = DensityRegrow,
+-}
+-
+-component_registry.registerAllComponents(allComponents)
+-
+-return allComponents
+diff --git a/examples/tutorial/harvest/levels/harvest_finished/init.lua b/examples/tutorial/harvest/levels/harvest_finished/init.lua
+deleted file mode 100644
+index 085d49a..0000000
+--- a/examples/tutorial/harvest/levels/harvest_finished/init.lua
++++ /dev/null
+@@ -1,30 +0,0 @@
+---[[ Copyright 2020 DeepMind Technologies Limited.
+-
+-Licensed under the Apache License, Version 2.0 (the "License");
+-you may not use this file except in compliance with the License.
+-You may obtain a copy of the License at
+-
+-    https://www.apache.org/licenses/LICENSE-2.0
+-
+-Unless required by applicable law or agreed to in writing, software
+-distributed under the License is distributed on an "AS IS" BASIS,
+-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-See the License for the specific language governing permissions and
+-limitations under the License.
+-]]
+--- Entry point lua file for the Harvest level.
+-
+-local meltingpot = 'meltingpot.lua.modules.'
+-local api_factory = require(meltingpot .. 'api_factory')
+-local simulation = require(meltingpot .. 'base_simulation')
+-
+--- Required to be able to use the components in the level
+-local component_library = require(meltingpot .. 'component_library')
+-local avatar_library = require(meltingpot .. 'avatar_library')
+-local components = require 'components'
+-
+-return api_factory.apiFactory{
+-    Simulation = simulation.BaseSimulation,
+-    settings = {
+-    }
+-}
+diff --git a/examples/tutorial/harvest/play_harvest.py b/examples/tutorial/harvest/play_harvest.py
+deleted file mode 100644
+index 18f1b77..0000000
+--- a/examples/tutorial/harvest/play_harvest.py
++++ /dev/null
+@@ -1,67 +0,0 @@
+-# Copyright 2020 DeepMind Technologies Limited.
+-#
+-# Licensed under the Apache License, Version 2.0 (the "License");
+-# you may not use this file except in compliance with the License.
+-# You may obtain a copy of the License at
+-#
+-#     https://www.apache.org/licenses/LICENSE-2.0
+-#
+-# Unless required by applicable law or agreed to in writing, software
+-# distributed under the License is distributed on an "AS IS" BASIS,
+-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-# See the License for the specific language governing permissions and
+-# limitations under the License.
+-"""A simple human player for playing the `Harvest` level interactively.
+-
+-Use `WASD` keys to move the character around. `Q` and `E` to turn.
+-"""
+-from absl import app
+-from absl import flags
+-from meltingpot.human_players import level_playing_utils
+-
+-from .configs.environment import harvest as game
+-
+-FLAGS = flags.FLAGS
+-
+-flags.DEFINE_integer('screen_width', 800,
+-                     'Width, in pixels, of the game screen')
+-flags.DEFINE_integer('screen_height', 600,
+-                     'Height, in pixels, of the game screen')
+-flags.DEFINE_integer('frames_per_second', 8, 'Frames per second of the game')
+-flags.DEFINE_string('observation', 'RGB', 'Name of the observation to render')
+-flags.DEFINE_bool('verbose', False, 'Whether we want verbose output')
+-flags.DEFINE_bool('display_text', False,
+-                  'Whether we to display a debug text message')
+-flags.DEFINE_string('text_message', 'This page intentionally left blank',
+-                    'Text to display if `display_text` is `True`')
+-
+-
+-_ACTION_MAP = {
+-    'move': level_playing_utils.get_direction_pressed,
+-    'turn': level_playing_utils.get_turn_pressed,
+-}
+-
+-
+-def verbose_fn(unused_timestep, unused_player_index: int) -> None:
+-  pass
+-
+-
+-def text_display_fn(unused_timestep, unused_player_index: int) -> str:
+-  return FLAGS.text_message
+-
+-
+-def main(argv):
+-  del argv  # Unused.
+-  level_playing_utils.run_episode(
+-      FLAGS.observation,
+-      {},  # Settings overrides
+-      _ACTION_MAP,
+-      game.get_config(),
+-      level_playing_utils.RenderType.PYGAME,
+-      FLAGS.screen_width, FLAGS.screen_height, FLAGS.frames_per_second,
+-      verbose_fn if FLAGS.verbose else None,
+-      text_display_fn if FLAGS.display_text else None)
+-
+-
+-if __name__ == '__main__':
+-  app.run(main)
