@@ -104,6 +104,7 @@ class _MeltingPotPettingZooEnv(pettingzoo_utils.ParallelEnv):
     self.state() is a list of length 7 - for each player environment
     We shall render just the first of these, i.e. self.state()[0]
     """
+    #print(self.state())
     rgb_arr = self.state()[0]['WORLD.RGB']
     if mode == 'human':
       plt.cla()
