@@ -18,10 +18,10 @@ import functools
 from gymnasium import utils as gym_utils
 import matplotlib.pyplot as plt
 from meltingpot import substrate
+from meltingpot.substrate import get_factory_from_config
 from ml_collections import config_dict
 from pettingzoo import utils as pettingzoo_utils
 from pettingzoo.utils import wrappers
-from meltingpot.substrate import get_factory_from_config
 
 from ..gym import utils
 
@@ -51,9 +51,8 @@ class _MeltingPotPettingZooEnv(pettingzoo_utils.ParallelEnv):
   def __init__(self, env_config, max_cycles):
     self.env_config = config_dict.ConfigDict(env_config)
     self.max_cycles = max_cycles
-    self._env = get_factory_from_config(self.env_config).build(roles=self.env_config.default_player_roles)
-    # self._env = substrate.build( #! wasn't working this thought self.env_config was a string, and tried to call get_factory from name
-    #     self.env_config, roles=self.env_config.default_player_roles)
+    self._env = substrate.build_from_config(
+        self.env_config, roles=self.env_config.default_player_roles)
     self._num_players = len(self._env.observation_spec())
     self.possible_agents = [
         PLAYER_STR_FORMAT.format(index=index)
@@ -101,7 +100,11 @@ class _MeltingPotPettingZooEnv(pettingzoo_utils.ParallelEnv):
     self._env.close()
 
   def render(self, mode='human', filename=None):
-    rgb_arr = self.state()['WORLD.RGB']
+    """
+    self.state() is a list of length 7 - for each player environment
+    We shall render just the first of these, i.e. self.state()[0]
+    """
+    rgb_arr = self.state()[0]['WORLD.RGB']
     if mode == 'human':
       plt.cla()
       plt.imshow(rgb_arr, interpolation='nearest')

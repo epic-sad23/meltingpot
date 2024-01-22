@@ -1,21 +1,23 @@
 # docs and experiment results can be found at https://docs.cleanrl.dev/rl-algorithms/ppo/#ppo_pettingzoo_ma_ataripy
 import argparse
+from distutils.util import strtobool
 import importlib
 import os
 import random
 import time
-from distutils.util import strtobool
 
 import gymnasium as gym
+from meltingpot import substrate
 import numpy as np
 import supersuit as ss
 import torch
+from torch.distributions.categorical import Categorical
 import torch.nn as nn
 import torch.optim as optim
-from torch.distributions.categorical import Categorical
 from torch.utils.tensorboard import SummaryWriter
-from meltingpot import substrate
+
 from . import utils
+
 
 def parse_args():
     # fmt: off
@@ -30,7 +32,7 @@ def parse_args():
         help="if toggled, cuda will be enabled by default")
     parser.add_argument("--track", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
         help="if toggled, this experiment will be tracked with Weights and Biases")
-    parser.add_argument("--wandb-project-name", type=str, default="cleanRL",
+    parser.add_argument("--wandb-project-name", type=str, default="ppo",
         help="the wandb's project name")
     parser.add_argument("--wandb-entity", type=str, default=None,
         help="the entity (team) of wandb's project")
@@ -40,11 +42,11 @@ def parse_args():
     # Algorithm specific arguments
     parser.add_argument("--env-id", type=str, default="harvest_open",
         help="the id of the environment")
-    parser.add_argument("--total-timesteps", type=int, default=20000000,
+    parser.add_argument("--total-timesteps", type=int, default=1000,
         help="total timesteps of the experiments")
-    parser.add_argument("--learning-rate", type=float, default=2.5e-4,
+    parser.add_argument("--learning-rate", type=float, default=1e-4,
         help="the learning rate of the optimizer")
-    parser.add_argument("--num-envs", type=int, default=16,
+    parser.add_argument("--num-envs", type=int, default=1,
         help="the number of parallel game environments")
     parser.add_argument("--num-steps", type=int, default=128,
         help="the number of steps to run in each environment per policy rollout")
@@ -89,7 +91,7 @@ class Agent(nn.Module):
     def __init__(self, envs):
         super().__init__()
         self.network = nn.Sequential(
-            layer_init(nn.Conv2d(6, 32, 8, stride=4)),
+            layer_init(nn.Conv2d(envs.single_observation_space.shape[2], 32, 8, stride=4)),
             nn.ReLU(),
             layer_init(nn.Conv2d(32, 64, 4, stride=2)),
             nn.ReLU(),
@@ -104,10 +106,17 @@ class Agent(nn.Module):
 
     def get_value(self, x):
         x = x.clone()
-        x[:, :, :, [0, 1, 2, 3]] /= 255.0
+        num_rgb_channels = 12
+        """
+        we only divide the 4 stack frames x 3 RGB channels - NOT the agent indicators
+        """
+        x[:, :, :, :num_rgb_channels] /= 255.0
         return self.critic(self.network(x.permute((0, 3, 1, 2))))
 
     def get_action_and_value(self, x, action=None):
+        """
+        x is an observation - in our case with shape 7x88x88x19
+        """
         x = x.clone()
         x[:, :, :, [0, 1, 2, 3]] /= 255.0
         hidden = self.network(x.permute((0, 3, 1, 2)))
@@ -155,7 +164,6 @@ if __name__ == "__main__":
     # env = ss.color_reduction_v0(env, mode="B")
     # env = ss.resize_v1(env, x_size=84, y_size=84)
     # env = ss.frame_stack_v1(env, 4)
-    # env = ss.agent_indicator_v0(env, type_only=False)
     # env = ss.pettingzoo_env_to_vec_env_v1(env)
     # envs = ss.concat_vec_envs_v1(env, args.num_envs // 2, num_cpus=0, base_class="gym")
     # envs.single_observation_space = envs.observation_space
@@ -164,56 +172,59 @@ if __name__ == "__main__":
     # envs = gym.wrappers.RecordEpisodeStatistics(envs)
     # if args.capture_video:
     #     envs = gym.wrappers.RecordVideo(envs, f"videos/{run_name}")
+
+
     env_name = "commons_harvest__open"
     env_config = substrate.get_config(env_name)
-    env = utils.parallel_env(env_config)
-    rollout_len = 1000
-    total_timesteps = 2000000
-    num_agents = env.max_num_agents
-
-    # Training
     num_cpus = 1  # number of cpus
-    num_envs = 1  # number of parallel multi-agent environments
-    # number of frames to stack together; use >4 to avoid automatic
-    # VecTransposeImage
     num_frames = 4
-    # output layer of cnn extractor AND shared layer for policy and value
-    # functions
-    features_dim = 128
-    fcnet_hiddens = [1024, 128]  # Two hidden layers for cnn extractor
-    ent_coef = 0.001  # entropy coefficient in loss
-    batch_size = (rollout_len * num_envs // 2
-                )  # This is from the rllib baseline implementation
-    lr = 0.0001
-    n_epochs = 30
-    gae_lambda = 1.0
-    gamma = 0.99
-    target_kl = 0.01
-    grad_clip = 40
-    verbose = 3
     model_path = None  # Replace this with a saved model
 
     env = utils.parallel_env(
-        max_cycles=rollout_len,
+        max_cycles=args.num_steps,
         env_config=env_config,
     )
+    num_agents = env.max_num_agents
+
     env.render_mode = "rgb_array"
+
     env = ss.observation_lambda_v0(env, lambda x, _: x["RGB"], lambda s: s["RGB"])
     env = ss.frame_stack_v1(env, num_frames)
+    env = ss.agent_indicator_v0(env, type_only=False)
+    """
+    ^^^ added back in agent_indicator wrapper
+    Note this adds new channels!!!!
+    We have the original 12 channels for 3 RGB channels in 4 stacked frames
+    And we have 7 channels indicating which agent we are controlling (one-hot encoding)
+    """
     env = ss.pettingzoo_env_to_vec_env_v1(env)
     envs = ss.concat_vec_envs_v1(
         env,
-        num_vec_envs=num_envs,
+        num_vec_envs=args.num_envs,
         num_cpus=num_cpus,
-        base_class="stable_baselines3")
-    # env = vec_env.VecMonitor(env)
-    # env = vec_env.VecTransposeImage(env, True)
+        base_class="gymnasium")
+
     envs.single_observation_space = envs.observation_space
     envs.single_action_space = envs.action_space
     envs.is_vector_env = True
-    # envs = gym.wrappers.RecordEpisodeStatistics(envs)
 
-    eval_freq = 100000 // (num_envs * num_agents)
+    envs = gym.wrappers.RecordEpisodeStatistics(envs)
+    envs = gym.wrappers.RecordVideo(envs, f"videos/{run_name}")
+
+    args.num_envs *= env.num_envs
+
+    """
+    single environment observations have dimensions 88x88x(12+7)
+    for 88x88 pixels in 3 RGB channels, multiplied by the frame stacking
+    plus the agent indicator channels
+
+    one observations of envs will have dimensions 7Nx88x88x(12+7) - where N is
+    the number of envs set in this file. This is because each env of the
+    commons harvest open substrate has 7 envs in it - one for each player.
+    i.e. env.num_envs = 7, and envs.num_envs = sum(env.num_envs for env in vec_envs).
+    """
+
+    eval_freq = 100000 // (args.num_envs * num_agents)
 
     assert isinstance(envs.single_action_space, gym.spaces.Discrete), "only discrete action space is supported"
 
@@ -222,6 +233,12 @@ if __name__ == "__main__":
 
     # ALGO Logic: Storage setup
     obs = torch.zeros((args.num_steps, args.num_envs) + envs.single_observation_space.shape).to(device)
+    """
+    we set the first dimension of obs to be the number of steps
+    we will then add observations to this by calling obs[step] = next_obvs
+    note each observation is thus 7x88x88x19 - whilst `obs` is 128x7x88x88x19
+    with that first dimension for storing all the steps (in each env) per policy rollout
+    """
     actions = torch.zeros((args.num_steps, args.num_envs) + envs.single_action_space.shape).to(device)
     logprobs = torch.zeros((args.num_steps, args.num_envs)).to(device)
     rewards = torch.zeros((args.num_steps, args.num_envs)).to(device)
@@ -231,7 +248,13 @@ if __name__ == "__main__":
     # TRY NOT TO MODIFY: start the game
     global_step = 0
     start_time = time.time()
-    next_obs = torch.Tensor(envs.reset()).to(device)
+    """
+    seems that envs.reset() now returns a tuble with what we want first,
+    and then a list flattened_infos second. So I'm calling envs.reset()[0]
+    """
+    next_obs = torch.Tensor(envs.reset()[0]).to(device)
+
+
     next_done = torch.zeros(args.num_envs).to(device)
     num_updates = args.total_timesteps // args.batch_size
 
