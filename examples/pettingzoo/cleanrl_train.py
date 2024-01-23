@@ -31,7 +31,7 @@ def parse_args():
         help="if toggled, `torch.backends.cudnn.deterministic=False`")
     parser.add_argument("--cuda", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
         help="if toggled, cuda will be enabled by default")
-    parser.add_argument("--track", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
+    parser.add_argument("--track", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
         help="if toggled, this experiment will be tracked with Weights and Biases")
     parser.add_argument("--wandb-project-name", type=str, default="ppo",
         help="the wandb's project name")
@@ -43,7 +43,7 @@ def parse_args():
     # Algorithm specific arguments
     parser.add_argument("--env-id", type=str, default="harvest_open",
         help="the id of the environment")
-    parser.add_argument("--total-timesteps", type=int, default=100000,
+    parser.add_argument("--total-timesteps", type=int, default=1000001,
         help="total timesteps of the experiments")
     parser.add_argument("--learning-rate", type=float, default=1e-4,
         help="the learning rate of the optimizer")
@@ -287,7 +287,7 @@ if __name__ == "__main__":
     num_updates = args.total_timesteps // args.batch_size
     print(num_updates)
     for update in range(1, num_updates + 1):
-        if(update % 3 == 1):
+        if(update % 5 == 1):
           next_obs = torch.Tensor(test_envs.reset()).to(device)
           total_reward = 0
           for step in range(0, args.num_steps):
@@ -318,6 +318,7 @@ if __name__ == "__main__":
 
         for step in range(0, args.num_steps):
             global_step += 1 * args.num_envs
+
             obs[step] = next_obs
             dones[step] = next_done
 
@@ -332,13 +333,13 @@ if __name__ == "__main__":
             next_obs, reward, done, info = envs.step(action.cpu().numpy())
             rewards[step] = torch.tensor(reward).to(device).view(-1)
             next_obs, next_done = torch.Tensor(next_obs).to(device), torch.Tensor(done).to(device)
-
             for idx, item in enumerate(info):
-                player_idx = idx % 7
+                player_idx = idx % num_agents
                 if "episode" in item.keys():
                     print(f"global_step={global_step}, {player_idx}-episodic_return={item['episode']['r']}")
                     writer.add_scalar(f"charts/episodic_return-player{player_idx}", item["episode"]["r"], global_step)
                     writer.add_scalar(f"charts/episodic_length-player{player_idx}", item["episode"]["l"], global_step)
+
 
         # bootstrap value if not done
         with torch.no_grad():
