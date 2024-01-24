@@ -16,6 +16,7 @@ from torch.utils.tensorboard import SummaryWriter
 from examples.pettingzoo import video_recording
 
 from . import new_utils
+from . import pistonball_v6_custom
 
 
 def parse_args():
@@ -49,7 +50,7 @@ def parse_args():
         help="the learning rate of the optimizer")
     parser.add_argument("--num-envs", type=int, default=1,
         help="the number of parallel game environments")
-    parser.add_argument("--num-steps", type=int, default=1000,
+    parser.add_argument("--num-steps", type=int, default=64,
         help="the number of steps to run in each environment per policy rollout")
     parser.add_argument("--anneal-lr", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
         help="Toggle learning rate annealing for policy and value networks")
@@ -89,17 +90,20 @@ def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
 class Agent(nn.Module):
     def __init__(self, num_actions, num_channels):
         super().__init__()
+
         self.network = nn.Sequential(
-            layer_init(nn.Conv2d(num_channels, 32, 8, stride=4)),
+            layer_init(nn.Conv2d(num_channels, 32, 8, stride=4)), # on 88x88 output 21x21, on 64x64 output 15x15
             nn.ReLU(),
-            layer_init(nn.Conv2d(32, 64, 4, stride=2)),
+            layer_init(nn.Conv2d(32, 64, 4, stride=2)), # output 9x9, 6x6
             nn.ReLU(),
-            layer_init(nn.Conv2d(64, 64, 3, stride=1)),
+            layer_init(nn.Conv2d(64, 64, 3, stride=1)), # output 7x7, 4x4
             nn.ReLU(),
-            nn.Flatten(),
-            layer_init(nn.Linear(64 * 7 * 7, 512)),
+            nn.Flatten(), # output 64x7x7, 64x4x4
+            layer_init(nn.Linear(64 * 4 * 4, 512)),
             nn.ReLU(),
         )
+
+
         self.actor = layer_init(nn.Linear(512, num_actions), std=0.01)
         self.critic = layer_init(nn.Linear(512, 1), std=1)
 
@@ -164,7 +168,8 @@ def unbatchify(x, env):
 
 if __name__ == "__main__":
     args = parse_args()
-    run_name = f"{args.env_id}__{args.exp_name}__{args.seed}__{int(time.time())}"
+    #run_name = f"{args.env_id}__{args.exp_name}__{args.seed}__{int(time.time())}"
+    run_name = "pistons penalised only by their height (abs() version)"
     if args.track:
         import wandb
         wandb.init(
@@ -189,11 +194,11 @@ if __name__ == "__main__":
     torch.backends.cudnn.deterministic = args.torch_deterministic
 
     device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
-
     num_frames = 4
-    total_episodes = 400
+    total_episodes = 100
 
     """ ENV SETUP """
+    """
     env_name = "commons_harvest__open"
     env_config = substrate.get_config(env_name)
     env = new_utils.parallel_env(
@@ -201,6 +206,11 @@ if __name__ == "__main__":
         env_config=env_config,
     )
     env.render_mode = "rgb_array"
+    """
+
+    env = pistonball_v6_custom.parallel_env(render_mode="rgb_array", continuous=False, max_cycles=args.num_steps, local_ratio=0)
+    env = ss.color_reduction_v0(env)
+    env = ss.resize_v1(env, 64, 64)
     env = ss.frame_stack_v1(env, stack_size=num_frames)
     if args.agent_indicators:
         env = ss.agent_indicator_v0(env, type_only=False)
@@ -208,7 +218,7 @@ if __name__ == "__main__":
     num_actions = env.action_space(env.unwrapped.possible_agents[0]).n
     observation_dims = env.observation_space(env.unwrapped.possible_agents[0]).shape[:2]
     num_channels = env.observation_space(env.unwrapped.possible_agents[0]).shape[2]
-    env = video_recording.RecordVideo(env, f"videos/", episode_trigger=(lambda x: x%5==0))
+    env = video_recording.RecordVideo(env, f"videos_temp/", episode_trigger=(lambda x: x%5==0))
 
     """ LEARNER SETUP """
     agent = Agent(num_actions, num_channels).to(device)
@@ -345,6 +355,7 @@ if __name__ == "__main__":
 
         print(f"Training episode {episode}")
         print(f"Mean episodic Return: {np.mean(total_episodic_return)}")
+        print(f"Episode returns: {total_episodic_return}")
         print(f"Episode Length: {end_step}")
         print("*******************************")
         writer.add_scalar("charts/episode", episode, global_step)
