@@ -655,7 +655,7 @@ class raw_env(AECEnv, EzPickle):
 
             #total_reward = [global_reward * (1 - self.local_ratio)] * self.n_pistons  # start with global reward
             #total_reward = [(piston.position[1]-self.maximum_piston_y)/10 for piston in self.pistonList]
-            total_reward = [-abs(piston.position[1]-lowest_pos)/10 for piston in self.pistonList]
+            total_reward = [-abs(piston.position[1]-highest_pos)/10 for piston in self.pistonList]
             #total_reward = [(-abs(self.pistonList[idx].position[1]-ramp_height(idx)))/10 for idx in range(len(self.pistonList))]
 
 
