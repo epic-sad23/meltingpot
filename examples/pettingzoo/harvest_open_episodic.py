@@ -169,7 +169,7 @@ def unbatchify(x, env):
 if __name__ == "__main__":
     args = parse_args()
     #run_name = f"{args.env_id}__{args.exp_name}__{args.seed}__{int(time.time())}"
-    run_name = "pistons penalised only by their height (abs() version)"
+    run_name = "pistons penalised only by their height from top"
     if args.track:
         import wandb
         wandb.init(
