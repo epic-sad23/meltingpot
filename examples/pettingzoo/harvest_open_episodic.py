@@ -195,7 +195,7 @@ if __name__ == "__main__":
 
     device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
     num_frames = 4
-    total_episodes = 100
+    total_episodes = 200
 
     """ ENV SETUP """
     """
@@ -235,7 +235,6 @@ if __name__ == "__main__":
     ep_values = torch.zeros((args.num_steps, num_agents)).to(device)
 
     """ TRAINING LOGIC """
-    global_step = 0
     for episode in range(total_episodes):
 
         # Annealing the rate if instructed to do so.
@@ -251,7 +250,6 @@ if __name__ == "__main__":
 
         # each episode has num_steps
         for step in range(0, args.num_steps):
-            global_step += 1
             obs = batchify_obs(next_obs, device)
             ep_obs[step] = obs
             with torch.no_grad():
@@ -358,19 +356,18 @@ if __name__ == "__main__":
         print(f"Episode returns: {total_episodic_return}")
         print(f"Episode Length: {end_step}")
         print("*******************************")
-        writer.add_scalar("charts/episode", episode, global_step)
-        writer.add_scalar("charts/episode_length", end_step, global_step)
-        writer.add_scalar("charts/mean_episodic_return", np.mean(total_episodic_return), global_step)
+        writer.add_scalar("charts/episode_length", end_step, episode)
+        writer.add_scalar("charts/mean_episodic_return", np.mean(total_episodic_return), episode)
         for player_idx in range(num_agents):
-            writer.add_scalar(f"charts/episodic_return-player{player_idx}", total_episodic_return[player_idx], global_step)
-        writer.add_scalar("charts/learning_rate", optimizer.param_groups[0]["lr"], global_step)
-        writer.add_scalar("losses/value_loss", v_loss.item(), global_step)
-        writer.add_scalar("losses/policy_loss", pg_loss.item(), global_step)
-        writer.add_scalar("losses/entropy", entropy_loss.item(), global_step)
-        writer.add_scalar("losses/old_approx_kl", old_approx_kl.item(), global_step)
-        writer.add_scalar("losses/approx_kl", approx_kl.item(), global_step)
-        writer.add_scalar("losses/clipfrac", np.mean(clipfracs), global_step)
-        writer.add_scalar("losses/explained_variance", explained_var, global_step)
+            writer.add_scalar(f"charts/episodic_return-player{player_idx}", total_episodic_return[player_idx], episode)
+        writer.add_scalar("charts/learning_rate", optimizer.param_groups[0]["lr"], episode)
+        writer.add_scalar("losses/value_loss", v_loss.item(), episode)
+        writer.add_scalar("losses/policy_loss", pg_loss.item(), episode)
+        writer.add_scalar("losses/entropy", entropy_loss.item(), episode)
+        writer.add_scalar("losses/old_approx_kl", old_approx_kl.item(), episode)
+        writer.add_scalar("losses/approx_kl", approx_kl.item(), episode)
+        writer.add_scalar("losses/clipfrac", np.mean(clipfracs), episode)
+        writer.add_scalar("losses/explained_variance", explained_var, episode)
 
     env.close()
     writer.close()
