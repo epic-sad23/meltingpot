@@ -50,7 +50,7 @@ def parse_args():
         help="the learning rate of the optimizer")
     parser.add_argument("--num-envs", type=int, default=1,
         help="the number of parallel game environments")
-    parser.add_argument("--num-steps", type=int, default=200,
+    parser.add_argument("--num-steps", type=int, default=64,
         help="the number of steps to run in each environment per policy rollout")
     parser.add_argument("--anneal-lr", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
         help="Toggle learning rate annealing for policy and value networks")
@@ -169,7 +169,7 @@ def unbatchify(x, env):
 if __name__ == "__main__":
     args = parse_args()
     #run_name = f"{args.env_id}__{args.exp_name}__{args.seed}__{int(time.time())}"
-    run_name = "harvest with distance-from-top penalty"
+    run_name = "harvest with distance-from-top penalty (shorter episodes)"
     if args.track:
         import wandb
         wandb.init(
@@ -195,7 +195,7 @@ if __name__ == "__main__":
 
     device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
     num_frames = 4
-    total_episodes = 200
+    total_episodes = 400
 
     """ ENV SETUP """
 
