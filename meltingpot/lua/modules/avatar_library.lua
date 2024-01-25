@@ -351,6 +351,8 @@ end
 function Avatar:update()
   self:_handleTimedFreeze()
   self:_handleScheduledRemoval()
+  local position = self.gameObject:getPosition()
+  self:addReward(-position[2])
 end
 
 function Avatar:getIndex()

@@ -32,7 +32,7 @@ def parse_args():
         help="if toggled, cuda will be enabled by default")
     parser.add_argument("--track", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
         help="if toggled, this experiment will be tracked with Weights and Biases")
-    parser.add_argument("--wandb-project-name", type=str, default="ppo",
+    parser.add_argument("--wandb-project-name", type=str, default="harvest_objectives",
         help="the wandb's project name")
     parser.add_argument("--wandb-entity", type=str, default=None,
         help="the entity (team) of wandb's project")
@@ -50,7 +50,7 @@ def parse_args():
         help="the learning rate of the optimizer")
     parser.add_argument("--num-envs", type=int, default=1,
         help="the number of parallel game environments")
-    parser.add_argument("--num-steps", type=int, default=64,
+    parser.add_argument("--num-steps", type=int, default=200,
         help="the number of steps to run in each environment per policy rollout")
     parser.add_argument("--anneal-lr", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
         help="Toggle learning rate annealing for policy and value networks")
@@ -99,7 +99,7 @@ class Agent(nn.Module):
             layer_init(nn.Conv2d(64, 64, 3, stride=1)), # output 7x7, 4x4
             nn.ReLU(),
             nn.Flatten(), # output 64x7x7, 64x4x4
-            layer_init(nn.Linear(64 * 4 * 4, 512)),
+            layer_init(nn.Linear(64 * 7 * 7, 512)),
             nn.ReLU(),
         )
 
@@ -169,7 +169,7 @@ def unbatchify(x, env):
 if __name__ == "__main__":
     args = parse_args()
     #run_name = f"{args.env_id}__{args.exp_name}__{args.seed}__{int(time.time())}"
-    run_name = "pistons penalised only by their height from top"
+    run_name = "harvest with distance-from-top penalty"
     if args.track:
         import wandb
         wandb.init(
@@ -198,7 +198,7 @@ if __name__ == "__main__":
     total_episodes = 200
 
     """ ENV SETUP """
-    """
+
     env_name = "commons_harvest__open"
     env_config = substrate.get_config(env_name)
     env = new_utils.parallel_env(
@@ -206,11 +206,12 @@ if __name__ == "__main__":
         env_config=env_config,
     )
     env.render_mode = "rgb_array"
-    """
 
+    """
     env = pistonball_v6_custom.parallel_env(render_mode="rgb_array", continuous=False, max_cycles=args.num_steps, local_ratio=0)
     env = ss.color_reduction_v0(env)
-    env = ss.resize_v1(env, 64, 64)
+    env = ss.resize_v1(env, 64, 64)"""
+
     env = ss.frame_stack_v1(env, stack_size=num_frames)
     if args.agent_indicators:
         env = ss.agent_indicator_v0(env, type_only=False)
