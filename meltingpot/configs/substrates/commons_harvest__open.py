@@ -372,7 +372,7 @@ def create_apple_prefab(regrowth_radius=-1.0,  # pylint: disable=dangerous-defau
               "kwargs": {
                   "liveState": "apple",
                   "waitState": "appleWait",
-                  "rewardForEating": 0,
+                  "rewardForEating": 1.0,
               }
           },
           {
@@ -497,9 +497,6 @@ def create_avatar_object(player_idx: int,
                   "rewardForZapping": 0,
               }
           },
-          {
-              "component": "ReadyToShootObservation",
-          },
       ]
   }
   if _ENABLE_DEBUG_OBSERVATIONS:
@@ -537,7 +534,6 @@ def get_config():
   # Observation format configuration.
   config.individual_observation_names = [
       "RGB",
-      "READY_TO_SHOOT",
   ]
   config.global_observation_names = [
       "WORLD.RGB",
@@ -547,7 +543,6 @@ def get_config():
   config.action_spec = specs.action(len(ACTION_SET))
   config.timestep_spec = specs.timestep({
       "RGB": specs.OBSERVATION["RGB"],
-      "READY_TO_SHOOT": specs.OBSERVATION["READY_TO_SHOOT"],
       # Debug only (do not use the following observations in policies).
       "WORLD.RGB": specs.rgb(144, 192),
   })

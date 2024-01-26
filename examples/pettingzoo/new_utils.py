@@ -29,8 +29,8 @@ PLAYER_STR_FORMAT = 'player_{index}'
 MAX_CYCLES = 1000
 
 
-def parallel_env(env_config, max_cycles=MAX_CYCLES):
-  return _ParallelEnv(env_config, max_cycles)
+def parallel_env(env_config, max_cycles=MAX_CYCLES, principal=None):
+  return _ParallelEnv(env_config, max_cycles, principal)
 
 
 def raw_env(env_config, max_cycles=MAX_CYCLES):
@@ -53,11 +53,15 @@ def new_timestep_to_observations(timestep):
 class _MeltingPotPettingZooEnv(pettingzoo_utils.ParallelEnv):
   """An adapter between Melting Pot substrates and PettingZoo's ParallelEnv."""
 
-  def __init__(self, env_config, max_cycles):
+  def __init__(self, env_config, max_cycles,principal=None):
     self.env_config = config_dict.ConfigDict(env_config)
     self.max_cycles = max_cycles
-    self._env = substrate.build_from_config(
-        self.env_config, roles=self.env_config.default_player_roles)
+    if principal is None:
+        self._env = substrate.build_from_config(
+            self.env_config, roles=self.env_config.default_player_roles)
+    else:
+        self._env = substrate.build_umd_from_config(
+            self.env_config, roles=self.env_config.default_player_roles, principal=principal)
     self._num_players = len(self._env.observation_spec())
     self.possible_agents = [
         PLAYER_STR_FORMAT.format(index=index)
@@ -128,6 +132,6 @@ class _MeltingPotPettingZooEnv(pettingzoo_utils.ParallelEnv):
 class _ParallelEnv(_MeltingPotPettingZooEnv, gym_utils.EzPickle):
   metadata = {'render_modes': ['human', 'rgb_array']}
 
-  def __init__(self, env_config, max_cycles):
+  def __init__(self, env_config, max_cycles, principal=None):
     gym_utils.EzPickle.__init__(self, env_config, max_cycles)
-    _MeltingPotPettingZooEnv.__init__(self, env_config, max_cycles)
+    _MeltingPotPettingZooEnv.__init__(self, env_config, max_cycles, principal)

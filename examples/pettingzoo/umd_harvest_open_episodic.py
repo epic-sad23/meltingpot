@@ -16,7 +16,9 @@ from torch.utils.tensorboard import SummaryWriter
 from examples.pettingzoo import video_recording
 
 from . import new_utils
-from . import pistonball_v6_custom
+from .principal import Principal
+from .principal_utils import egalitarian
+from .principal_utils import vote
 
 
 def parse_args():
@@ -195,15 +197,19 @@ if __name__ == "__main__":
 
     device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
     num_frames = 4
-    total_episodes = 1
+    total_episodes = 6
+    num_players = 7
+
+    principal = Principal(egalitarian, num_players)
+
 
     """ ENV SETUP """
-
     env_name = "commons_harvest__open"
     env_config = substrate.get_config(env_name)
     env = new_utils.parallel_env(
         max_cycles=args.num_steps,
         env_config=env_config,
+        principal=principal
     )
     env.render_mode = "rgb_array"
 
@@ -216,10 +222,15 @@ if __name__ == "__main__":
     if args.agent_indicators:
         env = ss.agent_indicator_v0(env, type_only=False)
     num_agents = len(env.unwrapped.possible_agents)
+    assert num_agents == num_players
     num_actions = env.action_space(env.unwrapped.possible_agents[0]).n
     observation_dims = env.observation_space(env.unwrapped.possible_agents[0]).shape[:2]
     num_channels = env.observation_space(env.unwrapped.possible_agents[0]).shape[2]
-    env = video_recording.RecordVideo(env, f"videos_temp/", episode_trigger=(lambda x: x%5==0))
+    env = video_recording.RecordVideo(env, f"videos_temp/", episode_trigger=(lambda x: x%5==10))
+
+    """ UMD SETUP """
+    PLAYER_VALUES = np.random.uniform(size=[num_agents])*10
+    print(PLAYER_VALUES.mean())
 
     """ LEARNER SETUP """
     agent = Agent(num_actions, num_channels).to(device)
@@ -237,6 +248,10 @@ if __name__ == "__main__":
 
     """ TRAINING LOGIC """
     for episode in range(total_episodes):
+
+        # Vot on principal objective
+        principal_objective = vote(PLAYER_VALUES)
+        principal.set_objective(principal_objective)
 
         # Annealing the rate if instructed to do so.
         if args.anneal_lr:
@@ -262,6 +277,7 @@ if __name__ == "__main__":
             next_obs, rewards, terms, truncs, infos = env.step(
                 unbatchify(actions, env)
             )
+            print(dict(rewards).values())
 
             ep_rewards[step] = batchify(rewards, device)
             ep_terms[step] = batchify(terms, device)
