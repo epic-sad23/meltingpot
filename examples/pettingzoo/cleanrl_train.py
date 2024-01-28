@@ -17,6 +17,8 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.tensorboard import SummaryWriter
 
+from examples.pettingzoo import video_recording
+
 from . import utils
 
 
@@ -33,37 +35,41 @@ def parse_args():
         help="if toggled, cuda will be enabled by default")
     parser.add_argument("--track", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
         help="if toggled, this experiment will be tracked with Weights and Biases")
-    parser.add_argument("--wandb-project-name", type=str, default="ppo",
+    parser.add_argument("--wandb-project-name", type=str, default="commons-harvest",
         help="the wandb's project name")
     parser.add_argument("--wandb-entity", type=str, default=None,
         help="the entity (team) of wandb's project")
-    parser.add_argument("--capture_video", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
+    parser.add_argument("--capture-video", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
         help="whether to capture videos of the agent performances (check out `videos` folder)")
+    parser.add_argument("--video-freq", type=int, default=1,
+        help="capture video every how many episodes?")
 
     # Algorithm specific arguments
-    parser.add_argument("--env-id", type=str, default="harvest_open",
-        help="the id of the environment")
-    parser.add_argument("--total-timesteps", type=int, default=1000001,
-        help="total timesteps of the experiments")
-    parser.add_argument("--learning-rate", type=float, default=1e-4,
+    parser.add_argument("--learning-rate", type=float, default=2.5e-4,
         help="the learning rate of the optimizer")
-    parser.add_argument("--num-envs", type=int, default=1,
+    parser.add_argument("--adam-eps", type=float, default=1e-5,
+        help="eps value for the optimizer")
+    parser.add_argument("--num-parallel-games", type=int, default=1,
         help="the number of parallel game environments")
-    parser.add_argument("--num-steps", type=int, default=1000,
-        help="the number of steps to run in each environment per policy rollout")
+    parser.add_argument("--num-episodes", type=int, default=100,
+        help="the number of steps in an episode")
+    parser.add_argument("--episode-length", type=int, default=600,
+        help="the number of steps in an episode")
+    parser.add_argument("--sampling-horizon", type=int, default=200,
+        help="the number of timesteps between policy update iterations")
     parser.add_argument("--anneal-lr", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
         help="Toggle learning rate annealing for policy and value networks")
     parser.add_argument("--gamma", type=float, default=0.99,
         help="the discount factor gamma")
     parser.add_argument("--gae-lambda", type=float, default=0.95,
         help="the lambda for the general advantage estimation")
-    parser.add_argument("--num-minibatches", type=int, default=4,
-        help="the number of mini-batches")
+    parser.add_argument("--minibatch_size", type=int, default=128,
+        help="size of minibatches when training policy network")
     parser.add_argument("--update-epochs", type=int, default=4,
         help="the K epochs to update the policy")
     parser.add_argument("--norm-adv", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
         help="Toggles advantages normalization")
-    parser.add_argument("--clip-coef", type=float, default=0.1,
+    parser.add_argument("--clip-coef", type=float, default=0.2,
         help="the surrogate clipping coefficient")
     parser.add_argument("--clip-vloss", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
         help="Toggles whether or not to use a clipped loss for the value function, as per the paper.")
@@ -76,34 +82,29 @@ def parse_args():
     parser.add_argument("--target-kl", type=float, default=None,
         help="the target KL divergence threshold")
     args = parser.parse_args()
-    args.batch_size = int(args.num_envs * args.num_steps)
-    args.minibatch_size = int(args.batch_size // args.num_minibatches)
     # fmt: on
     return args
 
 
-def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
-    torch.nn.init.orthogonal_(layer.weight, std)
-    torch.nn.init.constant_(layer.bias, bias_const)
-    return layer
+
 
 
 class Agent(nn.Module):
     def __init__(self, envs):
         super().__init__()
         self.network = nn.Sequential(
-            layer_init(nn.Conv2d(envs.single_observation_space.shape[2], 32, 8, stride=4)),
+            self.layer_init(nn.Conv2d(envs.single_observation_space.shape[2], 32, 8, stride=4)),
             nn.ReLU(),
-            layer_init(nn.Conv2d(32, 64, 4, stride=2)),
+            self.layer_init(nn.Conv2d(32, 64, 4, stride=2)),
             nn.ReLU(),
-            layer_init(nn.Conv2d(64, 64, 3, stride=1)),
+            self.layer_init(nn.Conv2d(64, 64, 3, stride=1)),
             nn.ReLU(),
             nn.Flatten(),
-            layer_init(nn.Linear(64 * 7 * 7, 512)),
+            self.layer_init(nn.Linear(64 * 7 * 7, 512)),
             nn.ReLU(),
         )
-        self.actor = layer_init(nn.Linear(512, envs.single_action_space.n), std=0.01)
-        self.critic = layer_init(nn.Linear(512, 1), std=1)
+        self.actor = self.layer_init(nn.Linear(512, envs.single_action_space.n), std=0.01)
+        self.critic = self.layer_init(nn.Linear(512, 1), std=1)
 
     def get_value(self, x):
         x = x.clone()
@@ -116,9 +117,12 @@ class Agent(nn.Module):
 
     def get_action_and_value(self, x, action=None):
         """
-        x is an observation - in our case with shape 7x88x88x19
+        x is an observation - in our case with shape 88x88x19
         """
         x = x.clone()
+        import warnings
+        if x.shape[3] != 19:
+            warnings.warn("hardcoded value of 12 RGB channels - check RBG/indicator channel division here")
         num_rgb_channels = 12
         """
         we only divide the 4 stack frames x 3 RGB channels - NOT the agent indicators
@@ -131,13 +135,17 @@ class Agent(nn.Module):
             action = probs.sample()
         return action, probs.log_prob(action), probs.entropy(), self.critic(hidden)
 
+    def layer_init(self, layer, std=np.sqrt(2), bias_const=0.0):
+        torch.nn.init.orthogonal_(layer.weight, std)
+        torch.nn.init.constant_(layer.bias, bias_const)
+        return layer
+
 
 if __name__ == "__main__":
     args = parse_args()
-    run_name = f"{args.env_id}__{args.exp_name}__{args.seed}__{int(time.time())}"
+    run_name = f"commons_harvest__{args.exp_name}__{args.seed}__{int(time.time())}"
     if args.track:
         import wandb
-
         wandb.init(
             project=args.wandb_project_name,
             entity=args.wandb_entity,
@@ -161,24 +169,6 @@ if __name__ == "__main__":
 
     device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
 
-    # env setup
-    # env = importlib.import_module(f"pettingzoo.atari.{args.env_id}").parallel_env()
-    # env = ss.max_observation_v0(env, 2)
-    # env = ss.frame_skip_v0(env, 4)
-    # env = ss.clip_reward_v0(env, lower_bound=-1, upper_bound=1)
-    # env = ss.color_reduction_v0(env, mode="B")
-    # env = ss.resize_v1(env, x_size=84, y_size=84)
-    # env = ss.frame_stack_v1(env, 4)
-    # env = ss.pettingzoo_env_to_vec_env_v1(env)
-    # envs = ss.concat_vec_envs_v1(env, args.num_envs // 2, num_cpus=0, base_class="gym")
-    # envs.single_observation_space = envs.observation_space
-    # envs.single_action_space = envs.action_space
-    # envs.is_vector_env = True
-    # envs = gym.wrappers.RecordEpisodeStatistics(envs)
-    # if args.capture_video:
-    #     envs = gym.wrappers.RecordVideo(envs, f"videos/{run_name}")
-
-
     env_name = "commons_harvest__open"
     env_config = substrate.get_config(env_name)
     test_env_config = substrate.get_config(env_name)
@@ -187,138 +177,64 @@ if __name__ == "__main__":
     model_path = None  # Replace this with a saved model
 
     env = utils.parallel_env(
-        max_cycles=args.num_steps,
+        max_cycles=args.sampling_horizon,
         env_config=env_config,
     )
-    test_env = utils.parallel_env(
-        max_cycles=args.num_steps,
-        env_config=test_env_config,
-    )
     num_agents = env.max_num_agents
-
+    num_envs = args.num_parallel_games * num_agents
     env.render_mode = "rgb_array"
-    test_env.render_mode = "rgb_array"
-
-
     env = ss.observation_lambda_v0(env, lambda x, _: x["RGB"], lambda s: s["RGB"])
     env = ss.frame_stack_v1(env, num_frames)
     env = ss.agent_indicator_v0(env, type_only=False)
-    test_env = ss.observation_lambda_v0(test_env, lambda x, _: x["RGB"], lambda s: s["RGB"])
-    test_env = ss.frame_stack_v1(test_env, num_frames)
-    test_env = ss.agent_indicator_v0(test_env, type_only=False)
-    """
-    ^^^ added back in agent_indicator wrapper
-    Note this adds new channels!!!!
-    We have the original 12 channels for 3 RGB channels in 4 stacked frames
-    And we have 7 channels indicating which agent we are controlling (one-hot encoding)
-    """
     env = ss.pettingzoo_env_to_vec_env_v1(env)
-    test_env = ss.pettingzoo_env_to_vec_env_v1(test_env)
-
     envs = ss.concat_vec_envs_v1(
         env,
-        num_vec_envs=args.num_envs,
+        num_vec_envs=args.num_parallel_games,
         num_cpus=num_cpus,
         base_class="stable_baselines3")
-    test_envs = ss.concat_vec_envs_v1(
-        test_env,
-        num_vec_envs=args.num_envs,
-        num_cpus=num_cpus,
-        base_class="stable_baselines3")
-    """
-    gymnasium or sb3 base class? Main difference in reset() method:
-    # Note: SB3's vector envs return only observations on reset, and store infos in `self.reset_infos`
-    """
 
-    #envs = stable_baselines3.common.vec_env.VecVideoRecorder(envs, './videos', (lambda x: True), video_length=200, name_prefix='rl-video')
-
+    #test_env = new single env for recording
+    #recorded_env = video_recording.RecordVideo(test_env, f"videos_temp/", episode_trigger=(lambda x: x%args.video_freq == 0))
 
     envs.single_observation_space = envs.observation_space
     envs.single_action_space = envs.action_space
     envs.is_vector_env = True
-    test_envs.is_vector_env = True
-
-    #envs = gym.wrappers.RecordEpisodeStatistics(envs)
-    #envs = gym.wrappers.RecordVideo(envs, f"videos/{run_name}")
-
-    """
-    single environment observations have dimensions 88x88x(12+7)
-    for 88x88 pixels in 3 RGB channels, multiplied by the frame stacking
-    plus the agent indicator channels
-
-    one observations of envs will have dimensions 7Nx88x88x(12+7) - where N is
-    the number of envs set in this file. This is because each env of the
-    commons harvest open substrate has 7 envs in it - one for each player.
-    i.e. env.num_envs = 7, and envs.num_envs = sum(env.num_envs for env in vec_envs).
-    """
-
-    eval_freq = 100000 // (args.num_envs * num_agents)
-
     assert isinstance(envs.single_action_space, gym.spaces.Discrete), "only discrete action space is supported"
 
+
     agent = Agent(envs).to(device)
-    optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=1e-5)
+    optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=args.adam_eps)
 
     # ALGO Logic: Storage setup
-    obs = torch.zeros((args.num_steps, args.num_envs*num_agents) + envs.single_observation_space.shape).to(device)
-    """
-    we set the first dimension of obs to be the number of steps
-    we will then add observations to this by calling obs[step] = next_obvs
-    note each observation is thus 7x88x88x19 - whilst `obs` is 128x7x88x88x19
-    with that first dimension for storing all the steps (in each env) per policy rollout
-    """
-    actions = torch.zeros((args.num_steps, args.num_envs*num_agents) + envs.single_action_space.shape).to(device)
-    logprobs = torch.zeros((args.num_steps, args.num_envs*num_agents)).to(device)
-    rewards = torch.zeros((args.num_steps, args.num_envs*num_agents)).to(device)
-    dones = torch.zeros((args.num_steps, args.num_envs*num_agents)).to(device)
-    values = torch.zeros((args.num_steps, args.num_envs*num_agents)).to(device)
+    obs = torch.zeros((args.sampling_horizon, num_envs) + envs.single_observation_space.shape).to(device)
+    actions = torch.zeros((args.sampling_horizon, num_envs) + envs.single_action_space.shape).to(device)
+    logprobs = torch.zeros((args.sampling_horizon, num_envs)).to(device)
+    rewards = torch.zeros((args.sampling_horizon, num_envs)).to(device)
+    dones = torch.zeros((args.sampling_horizon, num_envs)).to(device)
+    values = torch.zeros((args.sampling_horizon, num_envs)).to(device)
 
-    # TRY NOT TO MODIFY: start the game
-    global_step = 0
-    start_time = time.time()
-    """
-    seems that envs.reset() now returns a tuble with what we want first,
-    and then a list flattened_infos second. So I'm calling envs.reset()[0]
-    """
+
     next_obs = torch.Tensor(envs.reset()).to(device)
+    next_done = torch.zeros(num_envs).to(device)
+    num_policy_updates_per_ep = args.episode_length // args.sampling_horizon
+    num_policy_updates_total = args.num_episodes * num_policy_updates_per_ep
+    num_updates_for_this_ep = 0
+    current_episode = 1
+    episode_step = 0
+    episode_rewards = torch.zeros(num_envs)
+    start_time = time.time()
 
+    for update in range(1, num_policy_updates_total + 1):
 
-    next_done = torch.zeros(args.num_envs*num_agents).to(device)
-    num_updates = args.total_timesteps // args.batch_size
-    print(num_updates)
-    for update in range(1, num_updates + 1):
-        if(update % 5 == 1):
-          next_obs = torch.Tensor(test_envs.reset()).to(device)
-          total_reward = 0
-          for step in range(0, args.num_steps):
-            obs[step] = next_obs
-            dones[step] = next_done
-
-            # ALGO LOGIC: action logic
-            with torch.no_grad():
-                action, logprob, _, value = agent.get_action_and_value(next_obs)
-                values[step] = value.flatten()
-            actions[step] = action
-            logprobs[step] = logprob
-
-            # TRY NOT TO MODIFY: execute the game and log data.
-            next_obs, reward, done, info = test_envs.step(action.cpu().numpy())
-            total_reward += sum(reward)
-            rewards[step] = torch.tensor(reward).to(device).view(-1)
-            next_obs, next_done = torch.Tensor(next_obs).to(device), torch.Tensor(done).to(device)
-          print("update number " + str(update) + " total reward " + str(total_reward))
-          writer.add_scalar("charts/evaluation_reward", total_reward, global_step)
-
-
-        # Annealing the rate if instructed to do so.
+        # annealing the rate if instructed to do so.
         if args.anneal_lr:
-            frac = 1.0 - (update - 1.0) / num_updates
+            frac = 1.0 - (update - 1.0) / num_policy_updates_total
             lrnow = frac * args.learning_rate
             optimizer.param_groups[0]["lr"] = lrnow
 
-        for step in range(0, args.num_steps):
-            global_step += 1 * args.num_envs
-
+        # collect data for policy update
+        start_step = episode_step
+        for step in range(0, args.sampling_horizon):
             obs[step] = next_obs
             dones[step] = next_done
 
@@ -333,21 +249,18 @@ if __name__ == "__main__":
             next_obs, reward, done, info = envs.step(action.cpu().numpy())
             rewards[step] = torch.tensor(reward).to(device).view(-1)
             next_obs, next_done = torch.Tensor(next_obs).to(device), torch.Tensor(done).to(device)
-            for idx, item in enumerate(info):
-                player_idx = idx % num_agents
-                if "episode" in item.keys():
-                    print(f"global_step={global_step}, {player_idx}-episodic_return={item['episode']['r']}")
-                    writer.add_scalar(f"charts/episodic_return-player{player_idx}", item["episode"]["r"], global_step)
-                    writer.add_scalar(f"charts/episodic_length-player{player_idx}", item["episode"]["l"], global_step)
+            episode_step += 1
 
+        episode_rewards += torch.sum(rewards,0)
+        end_step = episode_step - 1
 
         # bootstrap value if not done
         with torch.no_grad():
             next_value = agent.get_value(next_obs).reshape(1, -1)
             advantages = torch.zeros_like(rewards).to(device)
             lastgaelam = 0
-            for t in reversed(range(args.num_steps)):
-                if t == args.num_steps - 1:
+            for t in reversed(range(args.sampling_horizon)):
+                if t == args.sampling_horizon - 1:
                     nextnonterminal = 1.0 - next_done
                     nextvalues = next_value
                 else:
@@ -366,11 +279,11 @@ if __name__ == "__main__":
         b_values = values.reshape(-1)
 
         # Optimizing the policy and value network
-        b_inds = np.arange(args.batch_size)
+        b_inds = np.arange(len(b_obs))
         clipfracs = []
         for epoch in range(args.update_epochs):
             np.random.shuffle(b_inds)
-            for start in range(0, args.batch_size, args.minibatch_size):
+            for start in range(0, len(b_obs), args.minibatch_size):
                 end = start + args.minibatch_size
                 mb_inds = b_inds[start:end]
 
@@ -424,17 +337,41 @@ if __name__ == "__main__":
         var_y = np.var(y_true)
         explained_var = np.nan if var_y == 0 else 1 - np.var(y_true - y_pred) / var_y
 
-        # TRY NOT TO MODIFY: record rewards for plotting purposes
-        writer.add_scalar("charts/learning_rate", optimizer.param_groups[0]["lr"], global_step)
-        writer.add_scalar("losses/value_loss", v_loss.item(), global_step)
-        writer.add_scalar("losses/policy_loss", pg_loss.item(), global_step)
-        writer.add_scalar("losses/entropy", entropy_loss.item(), global_step)
-        writer.add_scalar("losses/old_approx_kl", old_approx_kl.item(), global_step)
-        writer.add_scalar("losses/approx_kl", approx_kl.item(), global_step)
-        writer.add_scalar("losses/clipfrac", np.mean(clipfracs), global_step)
-        writer.add_scalar("losses/explained_variance", explained_var, global_step)
-        print("SPS:", int(global_step / (time.time() - start_time)))
-        writer.add_scalar("charts/SPS", int(global_step / (time.time() - start_time)), global_step)
+        # one more policy update done
+        num_updates_for_this_ep += 1
+        print(f"Completed policy update {num_updates_for_this_ep} for episode {current_episode} - used steps {start_step} through {end_step}")
+
+        if num_updates_for_this_ep == num_policy_updates_per_ep:
+            # episode finished
+            writer.add_scalar("charts/learning_rate", optimizer.param_groups[0]["lr"], current_episode)
+            writer.add_scalar("losses/value_loss", v_loss.item(), current_episode)
+            writer.add_scalar("losses/policy_loss", pg_loss.item(), current_episode)
+            writer.add_scalar("losses/entropy", entropy_loss.item(), current_episode)
+            writer.add_scalar("losses/old_approx_kl", old_approx_kl.item(), current_episode)
+            writer.add_scalar("losses/approx_kl", approx_kl.item(), current_episode)
+            writer.add_scalar("losses/clipfrac", np.mean(clipfracs), current_episode)
+            writer.add_scalar("losses/explained_variance", explained_var, current_episode)
+            writer.add_scalar("charts/mean_episodic_return", torch.mean(episode_rewards), current_episode)
+            mean_rewards_across_envs = {player_idx:0 for player_idx in range(0, num_agents)}
+            for idx in range(len(episode_rewards)):
+                mean_rewards_across_envs[idx%num_agents] += episode_rewards[idx].item()
+            mean_rewards_across_envs = list(map(lambda x: x/args.num_parallel_games, mean_rewards_across_envs.values()))
+
+            for player_idx in range(num_agents):
+                writer.add_scalar(f"charts/episodic_return-player{player_idx}", mean_rewards_across_envs[player_idx], current_episode)
+            print(f"Finished episode {current_episode}, with {num_policy_updates_per_ep} policy updates")
+            print(f"Mean episodic return: {torch.mean(episode_rewards)}")
+            print(f"Episode returns: {mean_rewards_across_envs}")
+            print("*******************************")
+            # start a new episode:
+            next_obs = torch.Tensor(envs.reset()).to(device)
+            next_done = torch.zeros(num_envs).to(device)
+            # don't need to reset obs,actions,logprobs etc as they have length
+            # args.sampling_horizon so will just be overwritten
+            current_episode += 1
+            num_updates_for_this_ep = 0
+            episode_step = 0
+            episode_rewards = torch.zeros(num_envs)
 
     envs.close()
     writer.close()
