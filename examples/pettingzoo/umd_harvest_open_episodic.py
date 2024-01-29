@@ -84,30 +84,30 @@ def parse_args():
 
 
 
-def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
-    torch.nn.init.orthogonal_(layer.weight, std)
-    torch.nn.init.constant_(layer.bias, bias_const)
-    return layer
+
 
 class Agent(nn.Module):
     def __init__(self, num_actions, num_channels):
         super().__init__()
 
         self.network = nn.Sequential(
-            layer_init(nn.Conv2d(num_channels, 32, 8, stride=4)), # on 88x88 output 21x21, on 64x64 output 15x15
+            self.layer_init(nn.Conv2d(num_channels, 32, 8, stride=4)), # on 88x88 output 21x21, on 64x64 output 15x15
             nn.ReLU(),
-            layer_init(nn.Conv2d(32, 64, 4, stride=2)), # output 9x9, 6x6
+            self.layer_init(nn.Conv2d(32, 64, 4, stride=2)), # output 9x9, 6x6
             nn.ReLU(),
-            layer_init(nn.Conv2d(64, 64, 3, stride=1)), # output 7x7, 4x4
+            self.layer_init(nn.Conv2d(64, 64, 3, stride=1)), # output 7x7, 4x4
             nn.ReLU(),
             nn.Flatten(), # output 64x7x7, 64x4x4
-            layer_init(nn.Linear(64 * 7 * 7, 512)),
+            self.layer_init(nn.Linear(64 * 7 * 7, 512)),
             nn.ReLU(),
         )
+        self.actor = self.layer_init(nn.Linear(512, num_actions), std=0.01)
+        self.critic = self.layer_init(nn.Linear(512, 1), std=1)
 
-
-        self.actor = layer_init(nn.Linear(512, num_actions), std=0.01)
-        self.critic = layer_init(nn.Linear(512, 1), std=1)
+    def layer_init(self, layer, std=np.sqrt(2), bias_const=0.0):
+        torch.nn.init.orthogonal_(layer.weight, std)
+        torch.nn.init.constant_(layer.bias, bias_const)
+        return layer
 
     def get_value(self, x):
         x = x.clone()
@@ -249,7 +249,12 @@ if __name__ == "__main__":
     """ TRAINING LOGIC """
     for episode in range(total_episodes):
 
-        # Vot on principal objective
+        if episode % 100 == 99:
+            torch.save(agent.state_dict(),"./model.pth")
+            print("model saved")
+
+
+        # Vote on principal objective
         principal_objective = vote(PLAYER_VALUES)
         principal.set_objective(principal_objective)
 
@@ -264,8 +269,10 @@ if __name__ == "__main__":
         # reset the episodic return
         total_episodic_return = 0
 
+
         # each episode has num_steps
         for step in range(0, args.num_steps):
+
             obs = batchify_obs(next_obs, device)
             ep_obs[step] = obs
             with torch.no_grad():
@@ -274,10 +281,10 @@ if __name__ == "__main__":
             ep_actions[step] = actions
             ep_logprobs[step] = logprobs
 
-            next_obs, rewards, terms, truncs, infos = env.step(
+            next_obs, rewards, terms, truncs, infos, world_obs = env.step(
                 unbatchify(actions, env)
             )
-            print(dict(rewards).values())
+            principal.collect_step_world_obs(world_obs)
 
             ep_rewards[step] = batchify(rewards, device)
             ep_terms[step] = batchify(terms, device)
@@ -288,7 +295,7 @@ if __name__ == "__main__":
                 end_step = step
                 break
 
-
+        principal.end_of_episode()
         # bootstrap value if not done
         with torch.no_grad():
             ep_advantages = torch.zeros_like(ep_rewards).to(device)

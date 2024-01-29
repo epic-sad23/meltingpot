@@ -28,8 +28,8 @@ PLAYER_STR_FORMAT = 'player_{index}'
 MAX_CYCLES = 1000
 
 
-def parallel_env(env_config, max_cycles=MAX_CYCLES):
-  return _ParallelEnv(env_config, max_cycles)
+def parallel_env(env_config, max_cycles=MAX_CYCLES, principal=None):
+  return _ParallelEnv(env_config, max_cycles, principal)
 
 
 def raw_env(env_config, max_cycles=MAX_CYCLES):
@@ -43,15 +43,28 @@ def env(env_config, max_cycles=MAX_CYCLES):
   aec_env = wrappers.OrderEnforcingWrapper(aec_env)
   return aec_env
 
+def timestep_to_observations(timestep):
+  gym_observations = {}
+  for index, observation in enumerate(timestep.observation):
+    gym_observations[PLAYER_STR_FORMAT.format(index=index)] = {
+        key: value
+        for key, value in observation.items()
+        if 'WORLD.' not in key
+    }
+  return gym_observations, timestep.observation[0]['WORLD.RGB']
 
 class _MeltingPotPettingZooEnv(pettingzoo_utils.ParallelEnv):
   """An adapter between Melting Pot substrates and PettingZoo's ParallelEnv."""
 
-  def __init__(self, env_config, max_cycles):
+  def __init__(self, env_config, max_cycles, principal=None):
     self.env_config = config_dict.ConfigDict(env_config)
     self.max_cycles = max_cycles
-    self._env = substrate.build_from_config(
-        self.env_config, roles=self.env_config.default_player_roles)
+    if principal is None:
+        self._env = substrate.build_from_config(
+            self.env_config, roles=self.env_config.default_player_roles)
+    else:
+        self._env = substrate.build_umd_from_config(
+            self.env_config, roles=self.env_config.default_player_roles, principal=principal)
     self._num_players = len(self._env.observation_spec())
     self.possible_agents = [
         PLAYER_STR_FORMAT.format(index=index)
@@ -87,18 +100,19 @@ class _MeltingPotPettingZooEnv(pettingzoo_utils.ParallelEnv):
     self.num_cycles += 1
     done = timestep.last() or self.num_cycles >= self.max_cycles
     dones = {agent: done for agent in self.agents}
-    infos = {agent: {} for agent in self.agents}
+    observations, world_obs = timestep_to_observations(timestep)
+    infos = {agent: ({}, world_obs) for agent in self.agents}
+    #infos = {agent: {} for agent in self.agents}
+
     if done:
       self.agents = []
-
-    observations = utils.timestep_to_observations(timestep)
     return observations, rewards, dones, dones, infos
 
   def close(self):
     """See base class."""
     self._env.close()
 
-  def render(self, mode='human', filename=None):
+  def render(self, mode='not human human ffs', filename=None):
     """
     self.state() is a list of length 7 - for each player environment
     We shall render just the first of these, i.e. self.state()[0]
@@ -119,6 +133,6 @@ class _MeltingPotPettingZooEnv(pettingzoo_utils.ParallelEnv):
 class _ParallelEnv(_MeltingPotPettingZooEnv, gym_utils.EzPickle):
   metadata = {'render_modes': ['human', 'rgb_array']}
 
-  def __init__(self, env_config, max_cycles):
+  def __init__(self, env_config, max_cycles, principal=None):
     gym_utils.EzPickle.__init__(self, env_config, max_cycles)
-    _MeltingPotPettingZooEnv.__init__(self, env_config, max_cycles)
+    _MeltingPotPettingZooEnv.__init__(self, env_config, max_cycles, principal)

@@ -18,6 +18,9 @@ import torch.optim as optim
 from torch.utils.tensorboard import SummaryWriter
 
 from examples.pettingzoo import video_recording
+from examples.pettingzoo.principal import Principal
+from examples.pettingzoo.principal_utils import egalitarian
+from examples.pettingzoo.principal_utils import vote
 
 from . import utils
 
@@ -53,9 +56,9 @@ def parse_args():
         help="the number of parallel game environments")
     parser.add_argument("--num-episodes", type=int, default=100,
         help="the number of steps in an episode")
-    parser.add_argument("--episode-length", type=int, default=600,
+    parser.add_argument("--episode-length", type=int, default=20,
         help="the number of steps in an episode")
-    parser.add_argument("--sampling-horizon", type=int, default=200,
+    parser.add_argument("--sampling-horizon", type=int, default=20,
         help="the number of timesteps between policy update iterations")
     parser.add_argument("--anneal-lr", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
         help="Toggle learning rate annealing for policy and value networks")
@@ -63,7 +66,7 @@ def parse_args():
         help="the discount factor gamma")
     parser.add_argument("--gae-lambda", type=float, default=0.95,
         help="the lambda for the general advantage estimation")
-    parser.add_argument("--minibatch_size", type=int, default=128,
+    parser.add_argument("--minibatch_size", type=int, default=32,
         help="size of minibatches when training policy network")
     parser.add_argument("--update-epochs", type=int, default=4,
         help="the K epochs to update the policy")
@@ -84,9 +87,6 @@ def parse_args():
     args = parser.parse_args()
     # fmt: on
     return args
-
-
-
 
 
 class Agent(nn.Module):
@@ -169,20 +169,26 @@ if __name__ == "__main__":
 
     device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
 
+
+
     env_name = "commons_harvest__open"
     env_config = substrate.get_config(env_name)
-    test_env_config = substrate.get_config(env_name)
     num_cpus = 0  # number of cpus
     num_frames = 4
     model_path = None  # Replace this with a saved model
 
+    num_players = len(env_config.default_player_roles)
+    principal = Principal(egalitarian, num_players, args.episode_length)
+
     env = utils.parallel_env(
         max_cycles=args.sampling_horizon,
         env_config=env_config,
+        principal=principal
     )
     num_agents = env.max_num_agents
     num_envs = args.num_parallel_games * num_agents
     env.render_mode = "rgb_array"
+
     env = ss.observation_lambda_v0(env, lambda x, _: x["RGB"], lambda s: s["RGB"])
     env = ss.frame_stack_v1(env, num_frames)
     env = ss.agent_indicator_v0(env, type_only=False)
@@ -201,6 +207,8 @@ if __name__ == "__main__":
     envs.is_vector_env = True
     assert isinstance(envs.single_action_space, gym.spaces.Discrete), "only discrete action space is supported"
 
+    PLAYER_VALUES = np.random.uniform(size=[num_agents])*10
+    print(PLAYER_VALUES.mean())
 
     agent = Agent(envs).to(device)
     optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=args.adam_eps)
@@ -246,7 +254,28 @@ if __name__ == "__main__":
             logprobs[step] = logprob
 
             # TRY NOT TO MODIFY: execute the game and log data.
+            """
+            NOTE: info has been changed to return a list of entries for each
+                  environment (over num_agents and num_parallel_games), with
+                  each entry being a tuple of the old info dict (asfaik always
+                  empty until last step when it gets a 'terminal_observation')
+                  and the world observation numpy array.
+                  IMPORTANT:
+                  The environments are listed out equally in a list, but will
+                  be in chunks of length num_agents corresponding to which game
+                  is being played. If you are playing 2 simultaneous games of
+                  seven players, info will be a list of length 7. In this, the
+                  first seven entries will have the same info[i][1] world
+                  observation, and so will the next seven all share a world obs
+                  - but the two will differ between each other.
+            """
             next_obs, reward, done, info = envs.step(action.cpu().numpy())
+            import warnings
+            warnings.warn("Need to fix this to work with multiple parallel games")
+            principal.collect_step(episode_step, info[0][1], reward)
+
+
+
             rewards[step] = torch.tensor(reward).to(device).view(-1)
             next_obs, next_done = torch.Tensor(next_obs).to(device), torch.Tensor(done).to(device)
             episode_step += 1
@@ -363,6 +392,12 @@ if __name__ == "__main__":
             print(f"Mean episodic return: {torch.mean(episode_rewards)}")
             print(f"Episode returns: {mean_rewards_across_envs}")
             print("*******************************")
+            principal.end_of_episode()
+
+            # vote on principal objective
+            principal_objective = vote(PLAYER_VALUES)
+            principal.set_objective(principal_objective)
+
             # start a new episode:
             next_obs = torch.Tensor(envs.reset()).to(device)
             next_done = torch.zeros(num_envs).to(device)

@@ -5,12 +5,12 @@ import numpy as np
 
 def utilitarian(num_apples: dict[str, int], num_players) -> float:
     """Utilitarian objective"""
-    return sum(num_apples.values()) / num_players
+    return sum(num_apples) / num_players
 
 
 def egalitarian(num_apples: dict[str, int]) -> float:
     """Egalitarian objective"""
-    return min(num_apples.values())
+    return min(num_apples)
 
 
 def vote(player_values: np.ndarray) -> Callable:

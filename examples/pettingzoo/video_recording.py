@@ -70,6 +70,8 @@ class RecordVideo(gym.Wrapper, gym.utils.RecordConstructorArgs):
         )
         gym.Wrapper.__init__(self, env)
 
+        self.env = env
+
         if env.render_mode in {None, "human", "ansi", "ansi_list"}:
             raise ValueError(
                 f"Render mode is {env.render_mode}, which is incompatible with"
@@ -114,7 +116,7 @@ class RecordVideo(gym.Wrapper, gym.utils.RecordConstructorArgs):
 
     def reset(self, **kwargs):
         """Reset the environment using kwargs and then starts recording if video enabled."""
-        observations = super().reset(**kwargs)
+        observations = self.super().reset(**kwargs)
         self.terminated = False
         self.truncated = False
         if self.recording:
@@ -131,6 +133,7 @@ class RecordVideo(gym.Wrapper, gym.utils.RecordConstructorArgs):
 
     def start_video_recorder(self):
         """Starts video recorder using :class:`video_recorder.VideoRecorder`."""
+        print("starting")
         self.close_video_recorder()
 
         video_name = f"{self.name_prefix}-step-{self.step_id}"
@@ -197,7 +200,7 @@ class RecordVideo(gym.Wrapper, gym.utils.RecordConstructorArgs):
             elif self._video_enabled():
                 self.start_video_recorder()
 
-        return observations, rewards, terminateds, truncateds, infos
+        return observations, rewards, terminateds, infos
 
     def close_video_recorder(self):
         """Closes the video recorder if currently recording."""
