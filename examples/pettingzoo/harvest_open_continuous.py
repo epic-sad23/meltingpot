@@ -16,6 +16,7 @@ from torch.distributions.categorical import Categorical
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.tensorboard import SummaryWriter
+import torchvision
 
 from examples.pettingzoo import video_recording
 
@@ -410,7 +411,6 @@ if __name__ == "__main__":
             print("*******************************")
             if args.save_model and current_episode%args.save_model_freq == 0:
               torch.save(agent.state_dict(),f"./non_umd_models/agent_{current_episode}.pth")
-              torch.save(principal_agent.state_dict(),f"./non_umd_models/principal_{current_episode}.pth")
               print("model saved")
             # start a new episode:
             next_obs = torch.Tensor(envs.reset()).to(device)
