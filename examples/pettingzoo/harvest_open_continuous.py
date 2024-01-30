@@ -5,7 +5,7 @@ import importlib
 import os
 import random
 import time
-
+import warnings
 import gymnasium as gym
 from meltingpot import substrate
 import numpy as np
@@ -125,7 +125,6 @@ class Agent(nn.Module):
         x is an observation - in our case with shape 88x88x19
         """
         x = x.clone()
-        import warnings
         if x.shape[3] != 19:
             warnings.warn("hardcoded value of 12 RGB channels - check RBG/indicator channel division here")
         num_rgb_channels = 12
