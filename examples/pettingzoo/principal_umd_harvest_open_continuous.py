@@ -301,8 +301,8 @@ if __name__ == "__main__":
     num_updates_for_this_ep = 0
     current_episode = 1
     episode_step = 0
-    episode_rewards = torch.zeros(num_envs)
-    principal_episode_rewards = torch.zeros(args.num_parallel_games)
+    episode_rewards = torch.zeros(num_envs).to(device)
+    principal_episode_rewards = torch.zeros(args.num_parallel_games).to(device)
     start_time = time.time()
 
     prev_objective_val = 0
@@ -387,7 +387,7 @@ if __name__ == "__main__":
             principal_next_done = torch.zeros(args.num_parallel_games).to(device) # for now saying principal never done
 
             prev_cumulative_reward = torch.zeros(args.num_parallel_games, num_agents) if (episode_step % args.tax_period) == 0 else cumulative_rewards[step-1]
-            next_cumulative_reward = prev_cumulative_reward + torch.tensor(reward).view(-1,num_agents) # split reward into dimensions by game
+            next_cumulative_reward = prev_cumulative_reward.to(device) + torch.tensor(reward).to(device).view(-1,num_agents) # split reward into dimensions by game
             next_cumulative_reward = next_cumulative_reward.to(device)
             cumulative_rewards[step] = next_cumulative_reward.to(device)
             rewards[step] = torch.tensor(reward).to(device).view(-1)
@@ -620,8 +620,8 @@ if __name__ == "__main__":
             num_updates_for_this_ep = 0
             episode_step = 0
             prev_objective_val = 0
-            episode_rewards = torch.zeros(num_envs)
-            principal_episode_rewards = torch.zeros(args.num_parallel_games)
+            episode_rewards = torch.zeros(num_envs).to(device)
+            principal_episode_rewards = torch.zeros(args.num_parallel_games).to(device)
             tax_values = []
 
     envs.close()
