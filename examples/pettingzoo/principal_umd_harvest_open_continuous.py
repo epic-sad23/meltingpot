@@ -60,7 +60,7 @@ def parse_args():
         help="the learning rate of the optimizer")
     parser.add_argument("--adam-eps", type=float, default=1e-5,
         help="eps value for the optimizer")
-    parser.add_argument("--num-parallel-games", type=int, default=2,
+    parser.add_argument("--num-parallel-games", type=int, default=1,
         help="the number of parallel game environments")
     parser.add_argument("--num-episodes", type=int, default=100000,
         help="the number of steps in an episode")
@@ -217,7 +217,8 @@ class PrincipalAgent(nn.Module):
 
 if __name__ == "__main__":
     args = parse_args()
-    run_name = f"commons_harvest__{args.exp_name}__{args.seed}__{int(time.time())}"
+    #run_name = f"commons_harvest__{args.exp_name}__{args.seed}__{int(time.time())}"
+    run_name = "three tax brackets run 1"
     if args.track:
         import wandb
         wandb.init(
@@ -372,8 +373,9 @@ if __name__ == "__main__":
                 principal.update_tax_vals(principal_action)
                 tax_values.append(copy.deepcopy(principal.tax_vals))
             else:
+                warnings.warn("currently need to manually change this to match number of parallel games!!!!!!")
                 principal_actions[step] = torch.stack((
-                    torch.tensor([11]*3),
+                    #torch.tensor([11]*3),
                     torch.tensor([11]*3))
                     )
                 principal_logprobs[step] = torch.zeros(args.num_parallel_games)
@@ -617,9 +619,9 @@ if __name__ == "__main__":
               # currently only records first of any parallel games running but this is easily changed
               # at the point where we add to episode_world_obs
               video = torch.cat(episode_world_obs, dim=0).cpu()
-              torchvision.io.write_video(f"./vids/episode_{current_episode}.mp4", video, fps=20)
+              torchvision.io.write_video(f"./threetax_vids/episode_{current_episode}.mp4", video, fps=20)
               if args.track:
-                wandb.log({"video": wandb.Video(f"./vids/episode_{current_episode}.mp4")})
+                wandb.log({"video": wandb.Video(f"./threetax_vids/episode_{current_episode}.mp4")})
 
 
             writer.add_scalar("charts/learning_rate", optimizer.param_groups[0]["lr"], current_episode)
@@ -656,8 +658,8 @@ if __name__ == "__main__":
 
 
             if args.save_model and current_episode%args.save_model_freq == 0:
-              torch.save(agent.state_dict(),f"./models/agent_{current_episode}.pth")
-              torch.save(principal_agent.state_dict(),f"./models/principal_{current_episode}.pth")
+              torch.save(agent.state_dict(),f"./threetax_models/agent_{current_episode}.pth")
+              torch.save(principal_agent.state_dict(),f"./threetax_models/principal_{current_episode}.pth")
               print("model saved")
 
 
