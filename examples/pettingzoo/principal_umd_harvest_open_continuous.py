@@ -22,6 +22,8 @@ from examples.pettingzoo.principal import Principal
 from examples.pettingzoo.principal_utils import vote
 
 from . import utils
+from .vector_constructors import pettingzoo_env_to_vec_env_v1
+from .vector_constructors import sb3_concat_vec_envs_v1
 
 
 def parse_args():
@@ -250,12 +252,10 @@ if __name__ == "__main__":
     env = ss.observation_lambda_v0(env, lambda x, _: x["RGB"], lambda s: s["RGB"])
     env = ss.frame_stack_v1(env, num_frames)
     env = ss.agent_indicator_v0(env, type_only=False)
-    env = ss.pettingzoo_env_to_vec_env_v1(env)
-    envs = ss.concat_vec_envs_v1(
+    env = pettingzoo_env_to_vec_env_v1(env)
+    envs = sb3_concat_vec_envs_v1( # need our own as need reset to pass up world obs in info
         env,
-        num_vec_envs=args.num_parallel_games,
-        num_cpus=num_cpus,
-        base_class="stable_baselines3")
+        num_vec_envs=args.num_parallel_games)
 
     #test_env = new single env for recording
     #recorded_env = video_recording.RecordVideo(test_env, f"videos_temp/", episode_trigger=(lambda x: x%args.video_freq == 0))
