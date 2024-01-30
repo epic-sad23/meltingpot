@@ -45,9 +45,13 @@ def parse_args():
     parser.add_argument("--wandb-entity", type=str, default=None,
         help="the entity (team) of wandb's project")
     parser.add_argument("--capture-video", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
-        help="whether to capture videos of the agent performances (check out `videos` folder)")
+        help="whether to capture videos of the agent performances")
     parser.add_argument("--video-freq", type=int, default=1,
         help="capture video every how many episodes?")
+    parser.add_argument("--save-model", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
+        help="whether to save model parameters")
+    parser.add_argument("--save-model-freq", type=int, default=50,
+        help="save model parameters every how many episodes?")
 
     # Algorithm specific arguments
     parser.add_argument("--learning-rate", type=float, default=2.5e-4,
@@ -618,8 +622,12 @@ if __name__ == "__main__":
               # currently only records first of any parallel games running but this is easily changed
               # at the point where we add to episode_world_obs
               video = torch.cat(episode_world_obs, dim=0).cpu()
-              torchvision.io.write_video(f"./torchvision_videos/episode_{current_episode}.mp4", video, fps=12)
+              torchvision.io.write_video(f"./vids/episode_{current_episode}.mp4", video, fps=20)
 
+            if args.save_model and current_episode%args.model_save_freq == 0:
+              torch.save(agent.state_dict(),f".models/agent_{current_episode}.pth")
+              torch.save(principal_agent.state_dict(),f".models/principal_{current_episode}.pth")
+              print("model saved")
 
 
             # vote on principal objective
