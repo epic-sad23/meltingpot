@@ -16,6 +16,7 @@ from torch.distributions.categorical import Categorical
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.tensorboard import SummaryWriter
+import torchvision
 
 from examples.pettingzoo import video_recording
 from examples.pettingzoo.principal import Principal
@@ -309,6 +310,9 @@ if __name__ == "__main__":
     tax_values = []
     tax_frac = 1
 
+    # fill this with sampling horizon chunks for recording if needed
+    episode_world_obs = [0] * (args.episode_length//args.sampling_horizon)
+
     for update in range(1, num_policy_updates_total + 1):
 
         # annealing the rate if instructed to do so.
@@ -400,6 +404,8 @@ if __name__ == "__main__":
         principal_episode_rewards += torch.sum(principal_rewards,0)
         episode_rewards += torch.sum(rewards,0)
         end_step = episode_step - 1
+
+        episode_world_obs[num_updates_for_this_ep-1] = principal_obs[:,0,:,:,:].clone()
 
         # bootstrap value if not done
         with torch.no_grad():
@@ -606,6 +612,15 @@ if __name__ == "__main__":
             print(f"Principal returns: {principal_episode_rewards}")
             print(f"Tax values this episode (for each period): {tax_values}, capped by multiplier {tax_frac}")
             print("*******************************")
+
+            # Record
+            if args.capture_video and current_episode%args.video_freq == 0:
+              # currently only records first of any parallel games running but this is easily changed
+              # at the point where we add to episode_world_obs
+              video = torch.cat(episode_world_obs, dim=0).cpu()
+              torchvision.io.write_video(f"./torchvision_videos/episode_{current_episode}.mp4", video, fps=12)
+
+
 
             # vote on principal objective
             principal_objective = vote(PLAYER_VALUES)
