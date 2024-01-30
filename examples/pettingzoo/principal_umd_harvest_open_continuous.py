@@ -388,6 +388,7 @@ if __name__ == "__main__":
 
             prev_cumulative_reward = torch.zeros(args.num_parallel_games, num_agents) if (episode_step % args.tax_period) == 0 else cumulative_rewards[step-1]
             next_cumulative_reward = prev_cumulative_reward + torch.tensor(reward).view(-1,num_agents) # split reward into dimensions by game
+            next_cumulative_reward = next_cumulative_reward.to(device)
             cumulative_rewards[step] = next_cumulative_reward.to(device)
             rewards[step] = torch.tensor(reward).to(device).view(-1)
             next_obs, next_done = torch.Tensor(next_obs).to(device), torch.Tensor(done).to(device)
