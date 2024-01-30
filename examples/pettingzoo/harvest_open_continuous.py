@@ -20,6 +20,8 @@ from torch.utils.tensorboard import SummaryWriter
 from examples.pettingzoo import video_recording
 
 from . import utils
+from .vector_constructors import pettingzoo_env_to_vec_env_v1
+from .vector_constructors import sb3_concat_vec_envs_v1
 
 
 def parse_args():
@@ -33,29 +35,35 @@ def parse_args():
         help="if toggled, `torch.backends.cudnn.deterministic=False`")
     parser.add_argument("--cuda", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
         help="if toggled, cuda will be enabled by default")
-    parser.add_argument("--track", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
+    parser.add_argument("--track", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
         help="if toggled, this experiment will be tracked with Weights and Biases")
     parser.add_argument("--wandb-project-name", type=str, default="commons-harvest",
         help="the wandb's project name")
     parser.add_argument("--wandb-entity", type=str, default=None,
         help="the entity (team) of wandb's project")
     parser.add_argument("--capture-video", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
-        help="whether to capture videos of the agent performances (check out `videos` folder)")
-    parser.add_argument("--video-freq", type=int, default=1,
+        help="whether to capture videos of the agent performances")
+    parser.add_argument("--video-freq", type=int, default=20,
         help="capture video every how many episodes?")
+    parser.add_argument("--save-model", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
+        help="whether to save model parameters")
+    parser.add_argument("--save-model-freq", type=int, default=100,
+        help="save model parameters every how many episodes?")
 
     # Algorithm specific arguments
     parser.add_argument("--learning-rate", type=float, default=2.5e-4,
         help="the learning rate of the optimizer")
     parser.add_argument("--adam-eps", type=float, default=1e-5,
         help="eps value for the optimizer")
-    parser.add_argument("--num-parallel-games", type=int, default=2,
+    parser.add_argument("--num-parallel-games", type=int, default=1,
         help="the number of parallel game environments")
-    parser.add_argument("--num-episodes", type=int, default=100,
+    parser.add_argument("--num-episodes", type=int, default=100000,
         help="the number of steps in an episode")
     parser.add_argument("--episode-length", type=int, default=600,
         help="the number of steps in an episode")
-    parser.add_argument("--sampling-horizon", type=int, default=200,
+    parser.add_argument("--tax-annealment-proportion", type=float, default=0.02,
+        help="proportion of episodes over which to linearly anneal tax cap multiplier")
+    parser.add_argument("--sampling-horizon", type=int, default=120,
         help="the number of timesteps between policy update iterations")
     parser.add_argument("--anneal-lr", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
         help="Toggle learning rate annealing for policy and value networks")
@@ -166,10 +174,9 @@ if __name__ == "__main__":
     torch.backends.cudnn.deterministic = args.torch_deterministic
 
     device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
-
+    print("device: ", device)
     env_name = "commons_harvest__open"
     env_config = substrate.get_config(env_name)
-    test_env_config = substrate.get_config(env_name)
     num_cpus = 0  # number of cpus
     num_frames = 4
     model_path = None  # Replace this with a saved model
@@ -185,12 +192,10 @@ if __name__ == "__main__":
     env = ss.observation_lambda_v0(env, lambda x, _: x["RGB"], lambda s: s["RGB"])
     env = ss.frame_stack_v1(env, num_frames)
     env = ss.agent_indicator_v0(env, type_only=False)
-    env = ss.pettingzoo_env_to_vec_env_v1(env)
-    envs = ss.concat_vec_envs_v1(
+    env = pettingzoo_env_to_vec_env_v1(env)
+    envs = sb3_concat_vec_envs_v1( # need our own as need reset to pass up world obs in info
         env,
-        num_vec_envs=args.num_parallel_games,
-        num_cpus=num_cpus,
-        base_class="stable_baselines3")
+        num_vec_envs=args.num_parallel_games)
 
     #test_env = new single env for recording
     #recorded_env = video_recording.RecordVideo(test_env, f"videos_temp/", episode_trigger=(lambda x: x%args.video_freq == 0))
@@ -211,17 +216,28 @@ if __name__ == "__main__":
     rewards = torch.zeros((args.sampling_horizon, num_envs)).to(device)
     dones = torch.zeros((args.sampling_horizon, num_envs)).to(device)
     values = torch.zeros((args.sampling_horizon, num_envs)).to(device)
+    world_obs = torch.zeros((args.sampling_horizon, args.num_parallel_games) + (144,192,3)).to(device)
 
 
     next_obs = torch.Tensor(envs.reset()).to(device)
     next_done = torch.zeros(num_envs).to(device)
+    next_world_obs = torch.stack([torch.Tensor(envs.reset_infos[i][1]) for i in range(0,num_envs,num_agents)]).to(device)
+
     num_policy_updates_per_ep = args.episode_length // args.sampling_horizon
     num_policy_updates_total = args.num_episodes * num_policy_updates_per_ep
     num_updates_for_this_ep = 0
     current_episode = 1
     episode_step = 0
-    episode_rewards = torch.zeros(num_envs)
+    episode_rewards = torch.zeros(num_envs).to(device)
     start_time = time.time()
+    # fill this with sampling horizon chunks for recording if needed
+    episode_world_obs = [0] * (args.episode_length//args.sampling_horizon)
+
+    """
+    temporarily loading in a pretrained agent model to see what happens
+    """
+    warnings.warn("loading pretrained agents")
+    agent.load_state_dict(torch.load("./model9399.pth"))
 
     for update in range(1, num_policy_updates_total + 1):
 
@@ -236,6 +252,7 @@ if __name__ == "__main__":
         for step in range(0, args.sampling_horizon):
             obs[step] = next_obs
             dones[step] = next_done
+            world_obs[step] = next_world_obs
 
             # ALGO LOGIC: action logic
             with torch.no_grad():
@@ -262,12 +279,16 @@ if __name__ == "__main__":
             """
             next_obs, reward, done, info = envs.step(action.cpu().numpy())
 
+            next_world_obs = torch.stack([torch.Tensor(info[i][1]) for i in range(0,num_envs,num_agents)]).to(device)
+
+
             rewards[step] = torch.tensor(reward).to(device).view(-1)
             next_obs, next_done = torch.Tensor(next_obs).to(device), torch.Tensor(done).to(device)
             episode_step += 1
 
         episode_rewards += torch.sum(rewards,0)
         end_step = episode_step - 1
+        episode_world_obs[num_updates_for_this_ep-1] = world_obs[:,0,:,:,:].clone()
 
         # bootstrap value if not done
         with torch.no_grad():
@@ -359,6 +380,13 @@ if __name__ == "__main__":
 
         if num_updates_for_this_ep == num_policy_updates_per_ep:
             # episode finished
+            if args.capture_video and current_episode%args.video_freq == 0:
+              # currently only records first of any parallel games running but this is easily changed
+              # at the point where we add to episode_world_obs
+              video = torch.cat(episode_world_obs, dim=0).cpu()
+              torchvision.io.write_video(f"./non_umd_vids/episode_{current_episode}.mp4", video, fps=20)
+              if args.track:
+                wandb.log({"video": wandb.Video(f"./non_umd_vids/episode_{current_episode}.mp4")})
             writer.add_scalar("charts/learning_rate", optimizer.param_groups[0]["lr"], current_episode)
             writer.add_scalar("losses/value_loss", v_loss.item(), current_episode)
             writer.add_scalar("losses/policy_loss", pg_loss.item(), current_episode)
@@ -368,6 +396,8 @@ if __name__ == "__main__":
             writer.add_scalar("losses/clipfrac", np.mean(clipfracs), current_episode)
             writer.add_scalar("losses/explained_variance", explained_var, current_episode)
             writer.add_scalar("charts/mean_episodic_return", torch.mean(episode_rewards), current_episode)
+            writer.add_scalar("charts/episode", current_episode, current_episode)
+
             mean_rewards_across_envs = {player_idx:0 for player_idx in range(0, num_agents)}
             for idx in range(len(episode_rewards)):
                 mean_rewards_across_envs[idx%num_agents] += episode_rewards[idx].item()
@@ -379,6 +409,10 @@ if __name__ == "__main__":
             print(f"Mean episodic return: {torch.mean(episode_rewards)}")
             print(f"Episode returns: {mean_rewards_across_envs}")
             print("*******************************")
+            if args.save_model and current_episode%args.save_model_freq == 0:
+              torch.save(agent.state_dict(),f"./non_umd_models/agent_{current_episode}.pth")
+              torch.save(principal_agent.state_dict(),f"./non_umd_models/principal_{current_episode}.pth")
+              print("model saved")
             # start a new episode:
             next_obs = torch.Tensor(envs.reset()).to(device)
             next_done = torch.zeros(num_envs).to(device)
@@ -387,7 +421,7 @@ if __name__ == "__main__":
             current_episode += 1
             num_updates_for_this_ep = 0
             episode_step = 0
-            episode_rewards = torch.zeros(num_envs)
+            episode_rewards = torch.zeros(num_envs).to(device)
 
     envs.close()
     writer.close()

@@ -47,11 +47,11 @@ def parse_args():
         help="the entity (team) of wandb's project")
     parser.add_argument("--capture-video", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
         help="whether to capture videos of the agent performances")
-    parser.add_argument("--video-freq", type=int, default=1,
+    parser.add_argument("--video-freq", type=int, default=20,
         help="capture video every how many episodes?")
     parser.add_argument("--save-model", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
         help="whether to save model parameters")
-    parser.add_argument("--save-model-freq", type=int, default=50,
+    parser.add_argument("--save-model-freq", type=int, default=100,
         help="save model parameters every how many episodes?")
 
     # Algorithm specific arguments
@@ -63,13 +63,13 @@ def parse_args():
         help="the number of parallel game environments")
     parser.add_argument("--num-episodes", type=int, default=100000,
         help="the number of steps in an episode")
-    parser.add_argument("--episode-length", type=int, default=1000,
+    parser.add_argument("--episode-length", type=int, default=600,
         help="the number of steps in an episode")
     parser.add_argument("--tax-annealment-proportion", type=float, default=0.02,
         help="proportion of episodes over which to linearly anneal tax cap multiplier")
-    parser.add_argument("--sampling-horizon", type=int, default=200,
+    parser.add_argument("--sampling-horizon", type=int, default=120,
         help="the number of timesteps between policy update iterations")
-    parser.add_argument("--tax-period", type=int, default=100,
+    parser.add_argument("--tax-period", type=int, default=60,
         help="the number of timesteps tax periods last (at end of period tax vals updated and taxes applied)")
     parser.add_argument("--anneal-tax", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
         help="Toggle tax cap annealing over an initial proportion of episodes")
@@ -270,7 +270,7 @@ if __name__ == "__main__":
     envs.is_vector_env = True
     assert isinstance(envs.single_action_space, gym.spaces.Discrete), "only discrete action space is supported"
 
-    PLAYER_VALUES = np.random.uniform(size=[num_agents])
+    PLAYER_VALUES = np.random.uniform(size=[num_agents])*10
 
     agent = Agent(envs).to(device)
     principal_agent = PrincipalAgent(num_agents).to(device)
@@ -282,7 +282,6 @@ if __name__ == "__main__":
     actions = torch.zeros((args.sampling_horizon, num_envs) + envs.single_action_space.shape).to(device)
     logprobs = torch.zeros((args.sampling_horizon, num_envs)).to(device)
     rewards = torch.zeros((args.sampling_horizon, num_envs)).to(device)
-
     dones = torch.zeros((args.sampling_horizon, num_envs)).to(device)
     values = torch.zeros((args.sampling_horizon, num_envs)).to(device)
 
@@ -644,8 +643,8 @@ if __name__ == "__main__":
 
 
             if args.save_model and current_episode%args.save_model_freq == 0:
-              torch.save(agent.state_dict(),f".models/agent_{current_episode}.pth")
-              torch.save(principal_agent.state_dict(),f".models/principal_{current_episode}.pth")
+              torch.save(agent.state_dict(),f"./models/agent_{current_episode}.pth")
+              torch.save(principal_agent.state_dict(),f"./models/principal_{current_episode}.pth")
               print("model saved")
 
 
