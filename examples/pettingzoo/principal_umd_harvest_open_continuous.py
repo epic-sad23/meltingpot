@@ -18,6 +18,8 @@ import torch.optim as optim
 from torch.utils.tensorboard import SummaryWriter
 
 from examples.pettingzoo import video_recording
+from examples.pettingzoo.principal import Principal
+from examples.pettingzoo.principal_utils import vote
 
 from . import utils
 
@@ -55,15 +57,21 @@ def parse_args():
         help="the number of steps in an episode")
     parser.add_argument("--episode-length", type=int, default=600,
         help="the number of steps in an episode")
+    parser.add_argument("--tax-annealment-proportion", type=float, default=0,
+        help="proportion of episodes over which to linearly anneal tax cap multiplier")
     parser.add_argument("--sampling-horizon", type=int, default=200,
         help="the number of timesteps between policy update iterations")
+    parser.add_argument("--tax-period", type=int, default=60,
+        help="the number of timesteps tax periods last (at end of period tax vals updated and taxes applied)")
+    parser.add_argument("--anneal-tax", type=float, default=0,
+        help="Toggle tax cap annealing over an initial proportion of episodes")
     parser.add_argument("--anneal-lr", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
         help="Toggle learning rate annealing for policy and value networks")
     parser.add_argument("--gamma", type=float, default=0.99,
         help="the discount factor gamma")
     parser.add_argument("--gae-lambda", type=float, default=0.95,
         help="the lambda for the general advantage estimation")
-    parser.add_argument("--minibatch_size", type=int, default=128,
+    parser.add_argument("--minibatch_size", type=int, default=32,
         help="size of minibatches when training policy network")
     parser.add_argument("--update-epochs", type=int, default=4,
         help="the K epochs to update the policy")
@@ -125,7 +133,6 @@ class Agent(nn.Module):
         we only divide the 4 stack frames x 3 RGB channels - NOT the agent indicators
         """
         x[:, :, :, :num_rgb_channels] /= 255.0
-
         hidden = self.network(x.permute((0, 3, 1, 2)))
         logits = self.actor(hidden)
         probs = Categorical(logits=logits)
@@ -137,6 +144,57 @@ class Agent(nn.Module):
         torch.nn.init.orthogonal_(layer.weight, std)
         torch.nn.init.constant_(layer.bias, bias_const)
         return layer
+
+
+
+class PrincipalAgent(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.network = nn.Sequential(
+            self.layer_init(nn.Conv2d(3, 32, 8, stride=4)),
+            nn.ReLU(),
+            self.layer_init(nn.Conv2d(32, 64, 4, stride=2)),
+            nn.ReLU(),
+            self.layer_init(nn.Conv2d(64, 64, 3, stride=1)),
+            nn.ReLU(),
+            nn.Flatten(),
+            self.layer_init(nn.Linear(64 * 14 * 20, 512)),
+            nn.ReLU(),
+        )
+        # starting with just one tax number to be chosen between 0 and 10 (0-100%), and action 11 which is no-op
+        self.actor = self.layer_init(nn.Linear(512, 12), std=0.01)
+        self.critic = self.layer_init(nn.Linear(512, 1), std=1)
+
+    def get_value(self, x):
+        x = x.clone()
+        num_rgb_channels = 12
+        """
+        we only divide the 4 stack frames x 3 RGB channels - NOT the agent indicators
+        """
+        x /= 255.0
+        return self.critic(self.network(x.permute((0, 3, 1, 2))))
+
+    def get_action_and_value(self, x, action=None):
+        """
+        x is an observation - in our case with shape 88x88x19
+        """
+        x = x.clone()
+        """
+        we only divide the 4 stack frames x 3 RGB channels - NOT the agent indicators
+        """
+        x /= 255.0
+        hidden = self.network(x.permute((0, 3, 1, 2)))
+        logits = self.actor(hidden)
+        probs = Categorical(logits=logits)
+        if action is None:
+            action = probs.sample()
+        return action, probs.log_prob(action), probs.entropy(), self.critic(hidden)
+
+    def layer_init(self, layer, std=np.sqrt(2), bias_const=0.0):
+        torch.nn.init.orthogonal_(layer.weight, std)
+        torch.nn.init.constant_(layer.bias, bias_const)
+        return layer
+
 
 
 if __name__ == "__main__":
@@ -167,16 +225,21 @@ if __name__ == "__main__":
 
     device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
 
+
+
     env_name = "commons_harvest__open"
     env_config = substrate.get_config(env_name)
-    test_env_config = substrate.get_config(env_name)
     num_cpus = 0  # number of cpus
     num_frames = 4
     model_path = None  # Replace this with a saved model
 
+    num_players = len(env_config.default_player_roles)
+    principal = Principal(num_players, args.num_parallel_games)
+
     env = utils.parallel_env(
         max_cycles=args.sampling_horizon,
         env_config=env_config,
+        principal=principal
     )
     num_agents = env.max_num_agents
     num_envs = args.num_parallel_games * num_agents
@@ -200,9 +263,12 @@ if __name__ == "__main__":
     envs.is_vector_env = True
     assert isinstance(envs.single_action_space, gym.spaces.Discrete), "only discrete action space is supported"
 
+    PLAYER_VALUES = np.random.uniform(size=[num_agents])
 
     agent = Agent(envs).to(device)
+    principal_agent = PrincipalAgent().to(device)
     optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=args.adam_eps)
+    principal_optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=args.adam_eps)
 
     # ALGO Logic: Storage setup
     obs = torch.zeros((args.sampling_horizon, num_envs) + envs.single_observation_space.shape).to(device)
@@ -212,16 +278,31 @@ if __name__ == "__main__":
     dones = torch.zeros((args.sampling_horizon, num_envs)).to(device)
     values = torch.zeros((args.sampling_horizon, num_envs)).to(device)
 
+    principal_obs = torch.zeros((args.sampling_horizon, args.num_parallel_games) + (144,192,3)).to(device)
+    principal_actions = torch.zeros((args.sampling_horizon, args.num_parallel_games) + ()).to(device) # add into empty brackets when more action heads
+    principal_logprobs = torch.zeros((args.sampling_horizon, args.num_parallel_games)).to(device)
+    principal_rewards = torch.zeros((args.sampling_horizon, args.num_parallel_games)).to(device)
+    principal_dones = torch.zeros((args.sampling_horizon, args.num_parallel_games)).to(device)
+    principal_values = torch.zeros((args.sampling_horizon, args.num_parallel_games)).to(device)
 
     next_obs = torch.Tensor(envs.reset()).to(device)
     next_done = torch.zeros(num_envs).to(device)
+
+    principal_next_obs = torch.stack([torch.Tensor(envs.reset_infos[i][1]) for i in range(0,num_envs,num_agents)]).to(device)
+    principal_next_done = torch.zeros(args.num_parallel_games).to(device)
+
     num_policy_updates_per_ep = args.episode_length // args.sampling_horizon
     num_policy_updates_total = args.num_episodes * num_policy_updates_per_ep
     num_updates_for_this_ep = 0
     current_episode = 1
     episode_step = 0
     episode_rewards = torch.zeros(num_envs)
+    principal_episode_rewards = torch.zeros(args.num_parallel_games)
     start_time = time.time()
+
+    prev_objective_val = 0
+    tax_values = []
+    tax_frac = 1
 
     for update in range(1, num_policy_updates_total + 1):
 
@@ -231,11 +312,17 @@ if __name__ == "__main__":
             lrnow = frac * args.learning_rate
             optimizer.param_groups[0]["lr"] = lrnow
 
+        # anneal tax controlling multiplier
+        if args.anneal_tax:
+            tax_frac = 0.1 + 0.9*max((current_episode - 1.0) / (args.num_episodes*args.tax_annealment_proportion),1)
+
         # collect data for policy update
         start_step = episode_step
         for step in range(0, args.sampling_horizon):
             obs[step] = next_obs
             dones[step] = next_done
+            principal_obs[step] = principal_next_obs
+            principal_dones[step] = principal_next_done
 
             # ALGO LOGIC: action logic
             with torch.no_grad():
@@ -243,6 +330,21 @@ if __name__ == "__main__":
                 values[step] = value.flatten()
             actions[step] = action
             logprobs[step] = logprob
+
+            # ALGO LOGIC: action logic
+            with torch.no_grad():
+                principal_action, principal_logprob, _, principal_value = principal_agent.get_action_and_value(principal_next_obs)
+                principal_values[step] = principal_value.flatten()
+
+            if(episode_step % args.tax_period == 0):
+                principal_actions[step] = principal_action
+                principal_logprobs[step] = principal_logprob
+                principal.update_tax_vals(principal_action)
+                tax_values.append(principal.tax_vals)
+            else:
+                principal_actions[step] = torch.tensor([11]*args.num_parallel_games)
+                principal_logprobs[step] = torch.tensor([0]*args.num_parallel_games)
+
 
             # TRY NOT TO MODIFY: execute the game and log data.
             """
@@ -261,11 +363,30 @@ if __name__ == "__main__":
                   - but the two will differ between each other.
             """
             next_obs, reward, done, info = envs.step(action.cpu().numpy())
+            principal.report_reward(reward)
+            #print(step, principal.tax_vals, reward)
+
+            if (episode_step+1) % args.tax_period == 0:
+                # last step of tax period
+                taxes = principal.end_of_tax_period()
+                reward -= tax_frac * np.array(list(taxes.values())).flatten()
+                #print("post-tax reward", principal.tax_vals, reward)
+
+
+            principal_next_obs = torch.stack([torch.Tensor(info[i][1]) for i in range(0,num_envs,num_agents)]).to(device)
+            principal_reward = principal.objective(reward) - prev_objective_val
+            prev_objective_val = principal.objective(reward)
+            principal_next_done = torch.zeros(args.num_parallel_games).to(device) # for now saying principal never done
+
 
             rewards[step] = torch.tensor(reward).to(device).view(-1)
             next_obs, next_done = torch.Tensor(next_obs).to(device), torch.Tensor(done).to(device)
+
+            principal_rewards[step] = torch.tensor(principal_reward).to(device).view(-1)
+
             episode_step += 1
 
+        principal_episode_rewards += torch.sum(principal_rewards,0)
         episode_rewards += torch.sum(rewards,0)
         end_step = episode_step - 1
 
@@ -285,6 +406,22 @@ if __name__ == "__main__":
                 advantages[t] = lastgaelam = delta + args.gamma * args.gae_lambda * nextnonterminal * lastgaelam
             returns = advantages + values
 
+        # bootstrap principal value if not done
+        with torch.no_grad():
+            principal_next_value = principal_agent.get_value(principal_next_obs).reshape(1, -1)
+            principal_advantages = torch.zeros_like(principal_rewards).to(device)
+            principal_lastgaelam = 0
+            for t in reversed(range(args.sampling_horizon)):
+                if t == args.sampling_horizon - 1:
+                    principal_nextnonterminal = 1.0 - principal_next_done
+                    principal_nextvalues = principal_next_value
+                else:
+                    principal_nextnonterminal = 1.0 - principal_dones[t + 1]
+                    principal_nextvalues = principal_values[t + 1]
+                principal_delta = principal_rewards[t] + args.gamma * principal_nextvalues * principal_nextnonterminal - principal_values[t]
+                principal_advantages[t] = principal_lastgaelam = principal_delta + args.gamma * args.gae_lambda * principal_nextnonterminal * principal_lastgaelam
+            principal_returns = principal_advantages + principal_values
+
         # flatten the batch
         b_obs = obs.reshape((-1,) + envs.single_observation_space.shape)
         b_logprobs = logprobs.reshape(-1)
@@ -293,8 +430,15 @@ if __name__ == "__main__":
         b_returns = returns.reshape(-1)
         b_values = values.reshape(-1)
 
+        principal_b_obs = principal_obs.reshape((-1,) + (144,192,3))
+        principal_b_logprobs = principal_logprobs.reshape(-1)
+        principal_b_actions = principal_actions.reshape((-1,) + ())
+        principal_b_advantages = principal_advantages.reshape(-1)
+        principal_b_returns = principal_returns.reshape(-1)
+        principal_b_values = principal_values.reshape(-1)
 
-        # Optimizing the policy and value network
+
+        # Optimizing the agent policy and value network
         b_inds = np.arange(len(b_obs))
         clipfracs = []
         for epoch in range(args.update_epochs):
@@ -307,20 +451,24 @@ if __name__ == "__main__":
                 logratio = newlogprob - b_logprobs[mb_inds]
                 ratio = logratio.exp()
 
+
                 with torch.no_grad():
                     # calculate approx_kl http://joschu.net/blog/kl-approx.html
                     old_approx_kl = (-logratio).mean()
                     approx_kl = ((ratio - 1) - logratio).mean()
                     clipfracs += [((ratio - 1.0).abs() > args.clip_coef).float().mean().item()]
 
+
                 mb_advantages = b_advantages[mb_inds]
                 if args.norm_adv:
                     mb_advantages = (mb_advantages - mb_advantages.mean()) / (mb_advantages.std() + 1e-8)
+
 
                 # Policy loss
                 pg_loss1 = -mb_advantages * ratio
                 pg_loss2 = -mb_advantages * torch.clamp(ratio, 1 - args.clip_coef, 1 + args.clip_coef)
                 pg_loss = torch.max(pg_loss1, pg_loss2).mean()
+
 
                 # Value loss
                 newvalue = newvalue.view(-1)
@@ -337,6 +485,7 @@ if __name__ == "__main__":
                 else:
                     v_loss = 0.5 * ((newvalue - b_returns[mb_inds]) ** 2).mean()
 
+
                 entropy_loss = entropy.mean()
                 loss = pg_loss - args.ent_coef * entropy_loss + v_loss * args.vf_coef
 
@@ -349,9 +498,73 @@ if __name__ == "__main__":
                 if approx_kl > args.target_kl:
                     break
 
+
+
+        # Optimizing the principal policy and value network
+        b_inds = np.arange(len(principal_b_obs))
+        principal_clipfracs = []
+        for epoch in range(args.update_epochs):
+            np.random.shuffle(b_inds)
+            for start in range(0, len(principal_b_obs), args.minibatch_size):
+                end = start + args.minibatch_size
+                mb_inds = b_inds[start:end]
+
+                _, principal_newlogprob, principal_entropy, principal_newvalue = principal_agent.get_action_and_value(principal_b_obs[mb_inds], principal_b_actions.long()[mb_inds])
+                principal_logratio = principal_newlogprob - principal_b_logprobs[mb_inds]
+                principal_ratio = principal_logratio.exp()
+
+
+                with torch.no_grad():
+                    # calculate approx_kl http://joschu.net/blog/kl-approx.html
+                    principal_old_approx_kl = (-principal_logratio).mean()
+                    principal_approx_kl = ((principal_ratio - 1) - principal_logratio).mean()
+                    principal_clipfracs += [((principal_ratio - 1.0).abs() > args.clip_coef).float().mean().item()]
+
+                principal_mb_advantages = principal_b_advantages[mb_inds]
+                if args.norm_adv:
+                    principal_mb_advantages = (principal_mb_advantages - principal_mb_advantages.mean()) / (principal_mb_advantages.std() + 1e-8)
+
+
+                # Policy loss
+                principal_pg_loss1 = -principal_mb_advantages * principal_ratio
+                principal_pg_loss2 = -principal_mb_advantages * torch.clamp(principal_ratio, 1 - args.clip_coef, 1 + args.clip_coef)
+                principal_pg_loss = torch.max(principal_pg_loss1, principal_pg_loss2).mean()
+
+
+                # Value loss
+                principal_newvalue = principal_newvalue.view(-1)
+                if args.clip_vloss:
+                    principal_v_loss_unclipped = (principal_newvalue - principal_b_returns[mb_inds]) ** 2
+                    principal_v_clipped = principal_b_values[mb_inds] + torch.clamp(
+                        principal_newvalue - principal_b_values[mb_inds],
+                        -args.clip_coef,
+                        args.clip_coef,
+                    )
+                    principal_v_loss_clipped = (principal_v_clipped - principal_b_returns[mb_inds]) ** 2
+                    principal_v_loss_max = torch.max(principal_v_loss_unclipped, principal_v_loss_clipped)
+                    principal_v_loss = 0.5 * principal_v_loss_max.mean()
+                else:
+                    principal_v_loss = 0.5 * ((principal_newvalue - principal_b_returns[mb_inds]) ** 2).mean()
+
+
+                principal_entropy_loss = principal_entropy.mean()
+                principal_loss = principal_pg_loss - args.ent_coef * principal_entropy_loss + principal_v_loss * args.vf_coef
+
+                principal_optimizer.zero_grad()
+                principal_loss.backward()
+                nn.utils.clip_grad_norm_(principal_agent.parameters(), args.max_grad_norm)
+                principal_optimizer.step()
+
+
+
+
         y_pred, y_true = b_values.cpu().numpy(), b_returns.cpu().numpy()
         var_y = np.var(y_true)
         explained_var = np.nan if var_y == 0 else 1 - np.var(y_true - y_pred) / var_y
+
+        principal_y_pred, principal_y_true = principal_b_values.cpu().numpy(), principal_b_returns.cpu().numpy()
+        principal_var_y = np.var(principal_y_true)
+        principal_explained_var = np.nan if principal_var_y == 0 else 1 - np.var(principal_y_true - principal_y_pred) / principal_var_y
 
         # one more policy update done
         num_updates_for_this_ep += 1
@@ -378,7 +591,14 @@ if __name__ == "__main__":
             print(f"Finished episode {current_episode}, with {num_policy_updates_per_ep} policy updates")
             print(f"Mean episodic return: {torch.mean(episode_rewards)}")
             print(f"Episode returns: {mean_rewards_across_envs}")
+            print(f"Principal returns: {principal_episode_rewards}")
+            print(f"Tax values this episode (for each period): {tax_values}, capped by multiplier {tax_frac}")
             print("*******************************")
+
+            # vote on principal objective
+            principal_objective = vote(PLAYER_VALUES)
+            principal.set_objective(principal_objective)
+
             # start a new episode:
             next_obs = torch.Tensor(envs.reset()).to(device)
             next_done = torch.zeros(num_envs).to(device)
@@ -387,7 +607,10 @@ if __name__ == "__main__":
             current_episode += 1
             num_updates_for_this_ep = 0
             episode_step = 0
+            prev_objective_val = 0
             episode_rewards = torch.zeros(num_envs)
+            principal_episode_rewards = torch.zeros(args.num_parallel_games)
+            tax_values = []
 
     envs.close()
     writer.close()

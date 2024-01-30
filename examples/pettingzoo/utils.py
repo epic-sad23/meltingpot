@@ -88,7 +88,8 @@ class _MeltingPotPettingZooEnv(pettingzoo_utils.ParallelEnv):
     timestep = self._env.reset()
     self.agents = self.possible_agents[:]
     self.num_cycles = 0
-    return utils.timestep_to_observations(timestep), {}
+    observations, world_obs = timestep_to_observations(timestep)
+    return observations, {agent: ({}, world_obs) for agent in self.agents}
 
   def step(self, action):
     """See base class."""
