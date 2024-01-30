@@ -17,6 +17,7 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.tensorboard import SummaryWriter
 import torchvision
+import warnings
 
 from examples.pettingzoo import video_recording
 from examples.pettingzoo.principal import Principal
@@ -38,9 +39,9 @@ def parse_args():
         help="if toggled, `torch.backends.cudnn.deterministic=False`")
     parser.add_argument("--cuda", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
         help="if toggled, cuda will be enabled by default")
-    parser.add_argument("--track", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
+    parser.add_argument("--track", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
         help="if toggled, this experiment will be tracked with Weights and Biases")
-    parser.add_argument("--wandb-project-name", type=str, default="commons-harvest",
+    parser.add_argument("--wandb-project-name", type=str, default="umd-commons-harvest",
         help="the wandb's project name")
     parser.add_argument("--wandb-entity", type=str, default=None,
         help="the entity (team) of wandb's project")
@@ -60,17 +61,17 @@ def parse_args():
         help="eps value for the optimizer")
     parser.add_argument("--num-parallel-games", type=int, default=1,
         help="the number of parallel game environments")
-    parser.add_argument("--num-episodes", type=int, default=100,
+    parser.add_argument("--num-episodes", type=int, default=100000,
         help="the number of steps in an episode")
-    parser.add_argument("--episode-length", type=int, default=100,
+    parser.add_argument("--episode-length", type=int, default=1000,
         help="the number of steps in an episode")
-    parser.add_argument("--tax-annealment-proportion", type=float, default=0,
+    parser.add_argument("--tax-annealment-proportion", type=float, default=0.02,
         help="proportion of episodes over which to linearly anneal tax cap multiplier")
-    parser.add_argument("--sampling-horizon", type=int, default=20,
+    parser.add_argument("--sampling-horizon", type=int, default=200,
         help="the number of timesteps between policy update iterations")
-    parser.add_argument("--tax-period", type=int, default=10,
+    parser.add_argument("--tax-period", type=int, default=100,
         help="the number of timesteps tax periods last (at end of period tax vals updated and taxes applied)")
-    parser.add_argument("--anneal-tax", type=float, default=0,
+    parser.add_argument("--anneal-tax", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
         help="Toggle tax cap annealing over an initial proportion of episodes")
     parser.add_argument("--anneal-lr", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
         help="Toggle learning rate annealing for policy and value networks")
@@ -78,7 +79,7 @@ def parse_args():
         help="the discount factor gamma")
     parser.add_argument("--gae-lambda", type=float, default=0.95,
         help="the lambda for the general advantage estimation")
-    parser.add_argument("--minibatch_size", type=int, default=32,
+    parser.add_argument("--minibatch_size", type=int, default=128,
         help="size of minibatches when training policy network")
     parser.add_argument("--update-epochs", type=int, default=4,
         help="the K epochs to update the policy")
@@ -132,7 +133,6 @@ class Agent(nn.Module):
         x is an observation - in our case with shape 88x88x19
         """
         x = x.clone()
-        import warnings
         if x.shape[3] != 19:
             warnings.warn("hardcoded value of 12 RGB channels - check RBG/indicator channel division here")
         num_rgb_channels = 12
@@ -233,7 +233,7 @@ if __name__ == "__main__":
     torch.backends.cudnn.deterministic = args.torch_deterministic
 
     device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
-
+    print("device: ", device)
 
 
     env_name = "commons_harvest__open"
@@ -317,6 +317,12 @@ if __name__ == "__main__":
     # fill this with sampling horizon chunks for recording if needed
     episode_world_obs = [0] * (args.episode_length//args.sampling_horizon)
 
+    """
+    temporarily loading in a pretrained agent model to see what happens
+    """
+    warnings.warn("loading pretrained agents")
+    agent.load_state_dict(torch.load("./model9399.pth"))
+
     for update in range(1, num_policy_updates_total + 1):
 
         # annealing the rate if instructed to do so.
@@ -327,7 +333,7 @@ if __name__ == "__main__":
 
         # anneal tax controlling multiplier
         if args.anneal_tax:
-            tax_frac = 0.1 + 0.9*max((current_episode - 1.0) / (args.num_episodes*args.tax_annealment_proportion),1)
+            tax_frac = 0.1 + 0.9*min((current_episode - 1.0) / (args.num_episodes*args.tax_annealment_proportion),1)
 
         # collect data for policy update
         start_step = episode_step
@@ -594,6 +600,17 @@ if __name__ == "__main__":
 
         if num_updates_for_this_ep == num_policy_updates_per_ep:
             # episode finished
+
+            # Record
+            if args.capture_video and current_episode%args.video_freq == 0:
+              # currently only records first of any parallel games running but this is easily changed
+              # at the point where we add to episode_world_obs
+              video = torch.cat(episode_world_obs, dim=0).cpu()
+              torchvision.io.write_video(f"./vids/episode_{current_episode}.mp4", video, fps=20)
+              if args.track:
+                wandb.log({"video": wandb.Video(f"./vids/episode_{current_episode}.mp4")})
+
+
             writer.add_scalar("charts/learning_rate", optimizer.param_groups[0]["lr"], current_episode)
             writer.add_scalar("losses/value_loss", v_loss.item(), current_episode)
             writer.add_scalar("losses/policy_loss", pg_loss.item(), current_episode)
@@ -603,6 +620,8 @@ if __name__ == "__main__":
             writer.add_scalar("losses/clipfrac", np.mean(clipfracs), current_episode)
             writer.add_scalar("losses/explained_variance", explained_var, current_episode)
             writer.add_scalar("charts/mean_episodic_return", torch.mean(episode_rewards), current_episode)
+            writer.add_scalar("charts/episode", current_episode, current_episode)
+            writer.add_scalar("charts/tax_frac", tax_frac, current_episode)
             mean_rewards_across_envs = {player_idx:0 for player_idx in range(0, num_agents)}
             for idx in range(len(episode_rewards)):
                 mean_rewards_across_envs[idx%num_agents] += episode_rewards[idx].item()
@@ -613,18 +632,18 @@ if __name__ == "__main__":
             print(f"Finished episode {current_episode}, with {num_policy_updates_per_ep} policy updates")
             print(f"Mean episodic return: {torch.mean(episode_rewards)}")
             print(f"Episode returns: {mean_rewards_across_envs}")
-            print(f"Principal returns: {principal_episode_rewards}")
+            print(f"Principal returns: {principal_episode_rewards.tolist()}")
+            for game_id in range(args.num_parallel_games):
+                writer.add_scalar(f"charts/principal_return_game{game_id}", principal_episode_rewards[game_id].item(), current_episode)
+                for tax_period in range(len(tax_values)):
+                  tax_step = (current_episode-1)*args.episode_length//args.tax_period + tax_period
+                  writer.add_scalar(f"charts/tax_value_game{game_id}", np.array(tax_values[tax_period][f"game_{game_id}"]), tax_step)
+
             print(f"Tax values this episode (for each period): {tax_values}, capped by multiplier {tax_frac}")
             print("*******************************")
 
-            # Record
-            if args.capture_video and current_episode%args.video_freq == 0:
-              # currently only records first of any parallel games running but this is easily changed
-              # at the point where we add to episode_world_obs
-              video = torch.cat(episode_world_obs, dim=0).cpu()
-              torchvision.io.write_video(f"./vids/episode_{current_episode}.mp4", video, fps=20)
 
-            if args.save_model and current_episode%args.model_save_freq == 0:
+            if args.save_model and current_episode%args.save_model_freq == 0:
               torch.save(agent.state_dict(),f".models/agent_{current_episode}.pth")
               torch.save(principal_agent.state_dict(),f".models/principal_{current_episode}.pth")
               print("model saved")
