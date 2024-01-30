@@ -1,10 +1,12 @@
 # docs and experiment results can be found at https://docs.cleanrl.dev/rl-algorithms/ppo/#ppo_pettingzoo_ma_ataripy
 import argparse
+import copy
 from distutils.util import strtobool
 import importlib
 import os
 import random
 import time
+import warnings
 
 import gymnasium as gym
 from meltingpot import substrate
@@ -17,7 +19,6 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.tensorboard import SummaryWriter
 import torchvision
-import warnings
 
 from examples.pettingzoo import video_recording
 from examples.pettingzoo.principal import Principal
@@ -59,7 +60,7 @@ def parse_args():
         help="the learning rate of the optimizer")
     parser.add_argument("--adam-eps", type=float, default=1e-5,
         help="eps value for the optimizer")
-    parser.add_argument("--num-parallel-games", type=int, default=1,
+    parser.add_argument("--num-parallel-games", type=int, default=2,
         help="the number of parallel game environments")
     parser.add_argument("--num-episodes", type=int, default=100000,
         help="the number of steps in an episode")
@@ -176,7 +177,9 @@ class PrincipalAgent(nn.Module):
         )
 
         # starting with just one tax number to be chosen between 0 and 10 (0-100%), and action 11 which is no-op
-        self.actor = self.layer_init(nn.Linear(512, 12), std=0.01)
+        self.actor_head1 = self.layer_init(nn.Linear(512, 12), std=0.01)
+        self.actor_head2 = self.layer_init(nn.Linear(512, 12), std=0.01)
+        self.actor_head3 = self.layer_init(nn.Linear(512, 12), std=0.01)
         self.critic = self.layer_init(nn.Linear(512, 1), std=1)
 
     def get_value(self, world_obs, cumulative_reward):
@@ -193,11 +196,17 @@ class PrincipalAgent(nn.Module):
         conv_out = self.conv_net(world_obs.permute((0, 3, 1, 2)))
         with_rewards = torch.cat((conv_out, cumulative_reward), dim=1) # shape num_games x (512+num_agents)
         hidden = self.fully_connected(with_rewards)
-        logits = self.actor(hidden)
-        probs = Categorical(logits=logits)
+        logits1 = self.actor_head1(hidden)
+        logits2 = self.actor_head2(hidden)
+        logits3 = self.actor_head3(hidden)
+        probs1 = Categorical(logits=logits1)
+        probs2 = Categorical(logits=logits2)
+        probs3 = Categorical(logits=logits3)
         if action is None:
-            action = probs.sample()
-        return action, probs.log_prob(action), probs.entropy(), self.critic(hidden)
+            action = torch.stack([probs1.sample(),probs2.sample(),probs3.sample()],dim=1)
+        log_prob = probs1.log_prob(action[:,0])+probs2.log_prob(action[:,1])+probs3.log_prob(action[:,2])
+        entropy = probs1.entropy()+probs2.entropy()+probs3.entropy()
+        return action, log_prob, entropy, self.critic(hidden)
 
     def layer_init(self, layer, std=np.sqrt(2), bias_const=0.0):
         torch.nn.init.orthogonal_(layer.weight, std)
@@ -287,7 +296,7 @@ if __name__ == "__main__":
 
     principal_obs = torch.zeros((args.sampling_horizon, args.num_parallel_games) + (144,192,3)).to(device)
     cumulative_rewards = torch.zeros((args.sampling_horizon, args.num_parallel_games, num_agents)).to(device)
-    principal_actions = torch.zeros((args.sampling_horizon, args.num_parallel_games) + ()).to(device) # add into empty brackets when more action heads
+    principal_actions = torch.zeros((args.sampling_horizon, args.num_parallel_games, 3)).to(device) # add into empty brackets when more action heads
     principal_logprobs = torch.zeros((args.sampling_horizon, args.num_parallel_games)).to(device)
     principal_rewards = torch.zeros((args.sampling_horizon, args.num_parallel_games)).to(device)
     principal_dones = torch.zeros((args.sampling_horizon, args.num_parallel_games)).to(device)
@@ -319,8 +328,8 @@ if __name__ == "__main__":
     """
     temporarily loading in a pretrained agent model to see what happens
     """
-    warnings.warn("loading pretrained agents")
-    agent.load_state_dict(torch.load("./model9399.pth"))
+    #warnings.warn("loading pretrained agents")
+    #agent.load_state_dict(torch.load("./model9399.pth"))
 
     for update in range(1, num_policy_updates_total + 1):
 
@@ -361,10 +370,13 @@ if __name__ == "__main__":
                 principal_actions[step] = principal_action
                 principal_logprobs[step] = principal_logprob
                 principal.update_tax_vals(principal_action)
-                tax_values.append(principal.tax_vals.copy())
+                tax_values.append(copy.deepcopy(principal.tax_vals))
             else:
-                principal_actions[step] = torch.tensor([11]*args.num_parallel_games)
-                principal_logprobs[step] = torch.tensor([0]*args.num_parallel_games)
+                principal_actions[step] = torch.stack((
+                    torch.tensor([11]*3),
+                    torch.tensor([11]*3))
+                    )
+                principal_logprobs[step] = torch.zeros(args.num_parallel_games)
 
 
             # TRY NOT TO MODIFY: execute the game and log data.
@@ -519,7 +531,7 @@ if __name__ == "__main__":
         principal_b_obs = principal_obs.reshape((-1,) + (144,192,3))
         principal_b_logprobs = principal_logprobs.reshape(-1)
         b_cumulative_rewards = cumulative_rewards.reshape(-1, num_agents) # from sampling_horizon x num_games x num_agents to (sampling_horizon*num_games) x num_agents
-        principal_b_actions = principal_actions.reshape((-1,) + ())
+        principal_b_actions = principal_actions.reshape((-1,3))
         principal_b_advantages = principal_advantages.reshape(-1)
         principal_b_returns = principal_returns.reshape(-1)
         principal_b_values = principal_values.reshape(-1)
@@ -636,7 +648,8 @@ if __name__ == "__main__":
                 writer.add_scalar(f"charts/principal_return_game{game_id}", principal_episode_rewards[game_id].item(), current_episode)
                 for tax_period in range(len(tax_values)):
                   tax_step = (current_episode-1)*args.episode_length//args.tax_period + tax_period
-                  writer.add_scalar(f"charts/tax_value_game{game_id}", np.array(tax_values[tax_period][f"game_{game_id}"]), tax_step)
+                  for bracket in range(0,3):
+                    writer.add_scalar(f"charts/tax_value_game{game_id}_bracket_{bracket+1}", np.array(tax_values[tax_period][f"game_{game_id}"][bracket]), tax_step)
 
             print(f"Tax values this episode (for each period): {tax_values}, capped by multiplier {tax_frac}")
             print("*******************************")

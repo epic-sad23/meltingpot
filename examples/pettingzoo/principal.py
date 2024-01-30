@@ -16,14 +16,18 @@ class Principal:
         self.num_games = num_games
         self.player_wealths = {f"game_{idx}" : [0] * num_players for idx in range(num_games)}
         self.collected_tax = {f"game_{idx}" : 0 for idx in range(num_games)}
-        self.__tax_brackets = [(1,100000)]
-        self.tax_vals = {f"game_{idx}" : [0] for idx in range(num_games)}
+        self.__tax_brackets = [(1,10),(11,20),(21,10000)]
+        self.tax_vals = {f"game_{idx}" : [0,0,0] for idx in range(num_games)}
 
 
     def update_tax_vals(self, actions):
-        for idx in range(len(actions)):
-            if actions[idx] != 11: # 11 is no-op
-                self.tax_vals[f"game_{idx}"] = [actions[idx].item()/10]
+        for game_id in range(self.num_games):
+            tax_choices = actions[:,game_id]
+            for bracket_idx in range(len(tax_choices)):
+                tax_val = tax_choices[bracket_idx].item()
+                if tax_val != 11:
+                    self.tax_vals[f"game_{game_id}"][bracket_idx] = tax_val/10
+
 
 
     def set_objective(self, objective):
