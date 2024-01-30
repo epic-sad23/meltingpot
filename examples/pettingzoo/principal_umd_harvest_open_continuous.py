@@ -51,17 +51,17 @@ def parse_args():
         help="the learning rate of the optimizer")
     parser.add_argument("--adam-eps", type=float, default=1e-5,
         help="eps value for the optimizer")
-    parser.add_argument("--num-parallel-games", type=int, default=2,
+    parser.add_argument("--num-parallel-games", type=int, default=1,
         help="the number of parallel game environments")
     parser.add_argument("--num-episodes", type=int, default=100,
         help="the number of steps in an episode")
-    parser.add_argument("--episode-length", type=int, default=600,
+    parser.add_argument("--episode-length", type=int, default=100,
         help="the number of steps in an episode")
     parser.add_argument("--tax-annealment-proportion", type=float, default=0,
         help="proportion of episodes over which to linearly anneal tax cap multiplier")
-    parser.add_argument("--sampling-horizon", type=int, default=200,
+    parser.add_argument("--sampling-horizon", type=int, default=20,
         help="the number of timesteps between policy update iterations")
-    parser.add_argument("--tax-period", type=int, default=60,
+    parser.add_argument("--tax-period", type=int, default=10,
         help="the number of timesteps tax periods last (at end of period tax vals updated and taxes applied)")
     parser.add_argument("--anneal-tax", type=float, default=0,
         help="Toggle tax cap annealing over an initial proportion of episodes")
@@ -148,9 +148,9 @@ class Agent(nn.Module):
 
 
 class PrincipalAgent(nn.Module):
-    def __init__(self):
+    def __init__(self, num_agents):
         super().__init__()
-        self.network = nn.Sequential(
+        self.conv_net = nn.Sequential(
             self.layer_init(nn.Conv2d(3, 32, 8, stride=4)),
             nn.ReLU(),
             self.layer_init(nn.Conv2d(32, 64, 4, stride=2)),
@@ -161,29 +161,31 @@ class PrincipalAgent(nn.Module):
             self.layer_init(nn.Linear(64 * 14 * 20, 512)),
             nn.ReLU(),
         )
+        self.fully_connected = nn.Sequential(
+            self.layer_init(nn.Linear(512+num_agents, 512)),
+            nn.ReLU(),
+            self.layer_init(nn.Linear(512, 512)),
+            nn.ReLU(),
+        )
+
         # starting with just one tax number to be chosen between 0 and 10 (0-100%), and action 11 which is no-op
         self.actor = self.layer_init(nn.Linear(512, 12), std=0.01)
         self.critic = self.layer_init(nn.Linear(512, 1), std=1)
 
-    def get_value(self, x):
-        x = x.clone()
-        num_rgb_channels = 12
-        """
-        we only divide the 4 stack frames x 3 RGB channels - NOT the agent indicators
-        """
-        x /= 255.0
-        return self.critic(self.network(x.permute((0, 3, 1, 2))))
+    def get_value(self, world_obs, cumulative_reward):
+        world_obs = world_obs.clone()
+        world_obs /= 255.0
+        conv_out = self.conv_net(world_obs.permute((0, 3, 1, 2)))
+        with_rewards = torch.cat((conv_out, cumulative_reward), dim=1) # shape num_games x (512+num_agents)
+        hidden = self.fully_connected(with_rewards)
+        return self.critic(hidden)
 
-    def get_action_and_value(self, x, action=None):
-        """
-        x is an observation - in our case with shape 88x88x19
-        """
-        x = x.clone()
-        """
-        we only divide the 4 stack frames x 3 RGB channels - NOT the agent indicators
-        """
-        x /= 255.0
-        hidden = self.network(x.permute((0, 3, 1, 2)))
+    def get_action_and_value(self, world_obs, cumulative_reward, action=None):
+        world_obs = world_obs.clone()
+        world_obs /= 255.0
+        conv_out = self.conv_net(world_obs.permute((0, 3, 1, 2)))
+        with_rewards = torch.cat((conv_out, cumulative_reward), dim=1) # shape num_games x (512+num_agents)
+        hidden = self.fully_connected(with_rewards)
         logits = self.actor(hidden)
         probs = Categorical(logits=logits)
         if action is None:
@@ -266,7 +268,7 @@ if __name__ == "__main__":
     PLAYER_VALUES = np.random.uniform(size=[num_agents])
 
     agent = Agent(envs).to(device)
-    principal_agent = PrincipalAgent().to(device)
+    principal_agent = PrincipalAgent(num_agents).to(device)
     optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=args.adam_eps)
     principal_optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=args.adam_eps)
 
@@ -275,10 +277,12 @@ if __name__ == "__main__":
     actions = torch.zeros((args.sampling_horizon, num_envs) + envs.single_action_space.shape).to(device)
     logprobs = torch.zeros((args.sampling_horizon, num_envs)).to(device)
     rewards = torch.zeros((args.sampling_horizon, num_envs)).to(device)
+
     dones = torch.zeros((args.sampling_horizon, num_envs)).to(device)
     values = torch.zeros((args.sampling_horizon, num_envs)).to(device)
 
     principal_obs = torch.zeros((args.sampling_horizon, args.num_parallel_games) + (144,192,3)).to(device)
+    cumulative_rewards = torch.zeros((args.sampling_horizon, args.num_parallel_games, num_agents)).to(device)
     principal_actions = torch.zeros((args.sampling_horizon, args.num_parallel_games) + ()).to(device) # add into empty brackets when more action heads
     principal_logprobs = torch.zeros((args.sampling_horizon, args.num_parallel_games)).to(device)
     principal_rewards = torch.zeros((args.sampling_horizon, args.num_parallel_games)).to(device)
@@ -287,6 +291,7 @@ if __name__ == "__main__":
 
     next_obs = torch.Tensor(envs.reset()).to(device)
     next_done = torch.zeros(num_envs).to(device)
+    next_cumulative_reward = torch.zeros(args.num_parallel_games, num_agents).to(device)
 
     principal_next_obs = torch.stack([torch.Tensor(envs.reset_infos[i][1]) for i in range(0,num_envs,num_agents)]).to(device)
     principal_next_done = torch.zeros(args.num_parallel_games).to(device)
@@ -333,14 +338,17 @@ if __name__ == "__main__":
 
             # ALGO LOGIC: action logic
             with torch.no_grad():
-                principal_action, principal_logprob, _, principal_value = principal_agent.get_action_and_value(principal_next_obs)
+                principal_action, principal_logprob, _, principal_value = principal_agent.get_action_and_value(principal_next_obs, next_cumulative_reward)
                 principal_values[step] = principal_value.flatten()
 
             if(episode_step % args.tax_period == 0):
+                # this `principal_action` is the one that was fed cumulative reward of last step of previous tax period
+                # so it is acting on the full wealth accumulated last tax period and an observation of the last frame
+                # of this tax period
                 principal_actions[step] = principal_action
                 principal_logprobs[step] = principal_logprob
                 principal.update_tax_vals(principal_action)
-                tax_values.append(principal.tax_vals)
+                tax_values.append(principal.tax_vals.copy())
             else:
                 principal_actions[step] = torch.tensor([11]*args.num_parallel_games)
                 principal_logprobs[step] = torch.tensor([0]*args.num_parallel_games)
@@ -378,7 +386,9 @@ if __name__ == "__main__":
             prev_objective_val = principal.objective(reward)
             principal_next_done = torch.zeros(args.num_parallel_games).to(device) # for now saying principal never done
 
-
+            prev_cumulative_reward = torch.zeros(args.num_parallel_games, num_agents) if (episode_step % args.tax_period) == 0 else cumulative_rewards[step-1]
+            next_cumulative_reward = prev_cumulative_reward + torch.tensor(reward).view(-1,num_agents) # split reward into dimensions by game
+            cumulative_rewards[step] = next_cumulative_reward.to(device)
             rewards[step] = torch.tensor(reward).to(device).view(-1)
             next_obs, next_done = torch.Tensor(next_obs).to(device), torch.Tensor(done).to(device)
 
@@ -408,7 +418,7 @@ if __name__ == "__main__":
 
         # bootstrap principal value if not done
         with torch.no_grad():
-            principal_next_value = principal_agent.get_value(principal_next_obs).reshape(1, -1)
+            principal_next_value = principal_agent.get_value(principal_next_obs, next_cumulative_reward).reshape(1, -1)
             principal_advantages = torch.zeros_like(principal_rewards).to(device)
             principal_lastgaelam = 0
             for t in reversed(range(args.sampling_horizon)):
@@ -430,14 +440,6 @@ if __name__ == "__main__":
         b_returns = returns.reshape(-1)
         b_values = values.reshape(-1)
 
-        principal_b_obs = principal_obs.reshape((-1,) + (144,192,3))
-        principal_b_logprobs = principal_logprobs.reshape(-1)
-        principal_b_actions = principal_actions.reshape((-1,) + ())
-        principal_b_advantages = principal_advantages.reshape(-1)
-        principal_b_returns = principal_returns.reshape(-1)
-        principal_b_values = principal_values.reshape(-1)
-
-
         # Optimizing the agent policy and value network
         b_inds = np.arange(len(b_obs))
         clipfracs = []
@@ -446,7 +448,6 @@ if __name__ == "__main__":
             for start in range(0, len(b_obs), args.minibatch_size):
                 end = start + args.minibatch_size
                 mb_inds = b_inds[start:end]
-
                 _, newlogprob, entropy, newvalue = agent.get_action_and_value(b_obs[mb_inds], b_actions.long()[mb_inds])
                 logratio = newlogprob - b_logprobs[mb_inds]
                 ratio = logratio.exp()
@@ -498,18 +499,28 @@ if __name__ == "__main__":
                 if approx_kl > args.target_kl:
                     break
 
-
+        # flatten batch for principal
+        principal_b_obs = principal_obs.reshape((-1,) + (144,192,3))
+        principal_b_logprobs = principal_logprobs.reshape(-1)
+        b_cumulative_rewards = cumulative_rewards.reshape(-1, num_agents) # from sampling_horizon x num_games x num_agents to (sampling_horizon*num_games) x num_agents
+        principal_b_actions = principal_actions.reshape((-1,) + ())
+        principal_b_advantages = principal_advantages.reshape(-1)
+        principal_b_returns = principal_returns.reshape(-1)
+        principal_b_values = principal_values.reshape(-1)
 
         # Optimizing the principal policy and value network
         b_inds = np.arange(len(principal_b_obs))
         principal_clipfracs = []
         for epoch in range(args.update_epochs):
             np.random.shuffle(b_inds)
-            for start in range(0, len(principal_b_obs), args.minibatch_size):
-                end = start + args.minibatch_size
+            for start in range(0, len(principal_b_obs), args.minibatch_size//num_agents): # principal has batch size num_games not num_envs(=num_games*num_agents) so divide to ensure same number of minibatches as agents
+                end = start + args.minibatch_size//num_agents
                 mb_inds = b_inds[start:end]
 
-                _, principal_newlogprob, principal_entropy, principal_newvalue = principal_agent.get_action_and_value(principal_b_obs[mb_inds], principal_b_actions.long()[mb_inds])
+                _, principal_newlogprob, principal_entropy, principal_newvalue = principal_agent.get_action_and_value(
+                    principal_b_obs[mb_inds],
+                    b_cumulative_rewards[mb_inds],
+                    principal_b_actions.long()[mb_inds])
                 principal_logratio = principal_newlogprob - principal_b_logprobs[mb_inds]
                 principal_ratio = principal_logratio.exp()
 

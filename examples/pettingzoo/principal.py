@@ -9,12 +9,9 @@ from torch.optim import Adam
 
 
 class Principal:
-    """Principal class for universal mechanism design
-    In this setting, the principal computes a tax on the reward based on the number of apples collected by the agent.
-    The tax should be between 0 and 1.5. 0 means no tax, 1.5 means 150% tax.
-    """
+
     def __init__(self, num_players, num_games) -> None:
-        self.set_objective("utilitarian")
+        self.set_objective("egalitarian")
         self.num_players = num_players
         self.num_games = num_games
         self.player_wealths = {f"game_{idx}" : [0] * num_players for idx in range(num_games)}
