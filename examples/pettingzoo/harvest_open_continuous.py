@@ -52,7 +52,7 @@ def parse_args():
         help="capture video every how many episodes?")
     parser.add_argument("--save-model", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
         help="whether to save model parameters")
-    parser.add_argument("--save-model-freq", type=int, default=100,
+    parser.add_argument("--save-model-freq", type=int, default=1,
         help="save model parameters every how many episodes?")
 
     # Algorithm specific arguments
@@ -115,26 +115,26 @@ class Agent(nn.Module):
         self.critic = self.layer_init(nn.Linear(512, 1), std=1)
 
     def get_value(self, x):
-        x = x.clone()
-        num_rgb_channels = 12
+        #x = x.clone()
+        #num_rgb_channels = 12
         """
         we only divide the 4 stack frames x 3 RGB channels - NOT the agent indicators
         """
-        x[:, :, :, :num_rgb_channels] /= 255.0
+        #x[:, :, :, :num_rgb_channels] /= 255.0
         return self.critic(self.network(x.permute((0, 3, 1, 2))))
 
     def get_action_and_value(self, x, action=None):
         """
         x is an observation - in our case with shape 88x88x19
         """
-        x = x.clone()
-        if x.shape[3] != 19:
-            warnings.warn("hardcoded value of 12 RGB channels - check RBG/indicator channel division here")
-        num_rgb_channels = 12
+        #x = x.clone()
+        #if x.shape[3] != 19:
+        #    warnings.warn("hardcoded value of 12 RGB channels - check RBG/indicator channel division here")
+        #num_rgb_channels = 12
         """
         we only divide the 4 stack frames x 3 RGB channels - NOT the agent indicators
         """
-        x[:, :, :, :num_rgb_channels] /= 255.0
+        #x[:, :, :, :num_rgb_channels] /= 255.0
 
         hidden = self.network(x.permute((0, 3, 1, 2)))
         logits = self.actor(hidden)
@@ -255,6 +255,10 @@ if __name__ == "__main__":
         # collect data for policy update
         start_step = episode_step
         for step in range(0, args.sampling_horizon):
+            if next_obs.shape[3] != 19:
+              warnings.warn("hardcoded value of 12 RGB channels - check RBG/indicator channel division here")
+            num_rgb_channels = 12
+            next_obs[:, :, :, :num_rgb_channels] /= 255.0
             obs[step] = next_obs
             dones[step] = next_done
             world_obs[step] = next_world_obs
