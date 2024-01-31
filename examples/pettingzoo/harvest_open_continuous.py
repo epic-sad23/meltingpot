@@ -7,6 +7,7 @@ import pickle
 import random
 import time
 import warnings
+import shutil
 
 import gymnasium as gym
 from meltingpot import substrate
@@ -39,19 +40,19 @@ def parse_args():
         help="if toggled, `torch.backends.cudnn.deterministic=False`")
     parser.add_argument("--cuda", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
         help="if toggled, cuda will be enabled by default")
-    parser.add_argument("--track", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
+    parser.add_argument("--track", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
         help="if toggled, this experiment will be tracked with Weights and Biases")
-    parser.add_argument("--wandb-project-name", type=str, default="continuous-harvest",
+    parser.add_argument("--wandb-project-name", type=str, default="continuous-harvest-utilitarian",
         help="the wandb's project name")
     parser.add_argument("--wandb-entity", type=str, default=None,
         help="the entity (team) of wandb's project")
     parser.add_argument("--capture-video", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
         help="whether to capture videos of the agent performances")
-    parser.add_argument("--video-freq", type=int, default=1,
+    parser.add_argument("--video-freq", type=int, default=100,
         help="capture video every how many episodes?")
     parser.add_argument("--save-model", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
         help="whether to save model parameters")
-    parser.add_argument("--save-model-freq", type=int, default=1,
+    parser.add_argument("--save-model-freq", type=int, default=100,
         help="save model parameters every how many episodes?")
 
     # Algorithm specific arguments
@@ -150,8 +151,10 @@ class Agent(nn.Module):
 
 if __name__ == "__main__":
     args = parse_args()
+    print("ep length ", args.episode_length)
+    print("sampling horizon ", args.sampling_horizon)
     #run_name = f"commons_harvest__{args.exp_name}__{args.seed}__{int(time.time())}"
-    run_name = "1000-100-utilitarian"
+    run_name = f"{args.episode_length}-{args.sampling_horizon}-utilitarian"
     if args.track:
         import wandb
         wandb.init(
@@ -234,12 +237,6 @@ if __name__ == "__main__":
     start_time = time.time()
     # fill this with sampling horizon chunks for recording if needed
     episode_world_obs = [0] * (args.episode_length//args.sampling_horizon)
-    to_save_episode_obs = [0] * (args.episode_length//args.sampling_horizon)
-    to_save_episode_actions = [0] * (args.episode_length//args.sampling_horizon)
-    to_save_episode_logprobs = [0] * (args.episode_length//args.sampling_horizon)
-    to_save_episode_rewards = [0] * (args.episode_length//args.sampling_horizon)
-    to_save_episode_dones = [0] * (args.episode_length//args.sampling_horizon)
-    to_save_episode_values = [0] * (args.episode_length//args.sampling_horizon)
 
     """
     temporarily loading in a pretrained agent model to see what happens
@@ -297,12 +294,23 @@ if __name__ == "__main__":
         episode_rewards += torch.sum(rewards,0)
         end_step = episode_step - 1
         episode_world_obs[num_updates_for_this_ep-1] = world_obs[:,0,:,:,:].clone()
-        to_save_episode_obs[num_updates_for_this_ep-1] = obs.clone()
-        to_save_episode_actions[num_updates_for_this_ep-1] = actions.clone()
-        to_save_episode_logprobs[num_updates_for_this_ep-1] = logprobs.clone()
-        to_save_episode_rewards[num_updates_for_this_ep-1] = rewards.clone()
-        to_save_episode_dones[num_updates_for_this_ep-1] = dones.clone()
-        to_save_episode_values[num_updates_for_this_ep-1] = values.clone()
+
+        if args.save_model and current_episode%args.save_model_freq == 0:
+          try:
+              os.mkdir(f"./saved_params_{run_name}")
+          except FileExistsError:
+              pass
+          try:
+              os.mkdir(f"./saved_params_{run_name}/ep{current_episode}")
+          except FileExistsError:
+              pass
+          torch.save(obs,f"./saved_params_{run_name}/ep{current_episode}/obs_samplerun{num_updates_for_this_ep}_ep{current_episode}.pt")
+          torch.save(actions,f"./saved_params_{run_name}/ep{current_episode}/actions_samplerun{num_updates_for_this_ep}_ep{current_episode}.pt")
+          torch.save(logprobs,f"./saved_params_{run_name}/ep{current_episode}/logprobs_samplerun{num_updates_for_this_ep}_ep{current_episode}.pt")
+          torch.save(rewards,f"./saved_params_{run_name}/ep{current_episode}/rewards_samplerun{num_updates_for_this_ep}_ep{current_episode}.pt")
+          torch.save(dones,f"./saved_params_{run_name}/ep{current_episode}/dones_samplerun{num_updates_for_this_ep}_ep{current_episode}.pt")
+          torch.save(values,f"./saved_params_{run_name}/ep{current_episode}/values_samplerun{num_updates_for_this_ep}_ep{current_episode}.pt")
+
 
         # bootstrap value if not done
         with torch.no_grad():
@@ -440,24 +448,8 @@ if __name__ == "__main__":
                 hug_upload.upload(f"./models_{run_name}", run_name,username="hegasz")
                 os.remove(f"./models_{run_name}/agent_{current_episode}.pth")
 
-                saved_params = {
-                    "episode": current_episode,
-                    "obs": to_save_episode_obs,
-                    "actions": to_save_episode_actions,
-                    "logprobs": to_save_episode_logprobs,
-                    "rewards":to_save_episode_rewards,
-                    "dones": to_save_episode_dones,
-                    "values": to_save_episode_values
-                }
-                try:
-                    os.mkdir(f"./saved_states_{run_name}")
-                except FileExistsError:
-                    pass
-                with open(f"./saved_states_{run_name}/saved_states_{current_episode}.pkl", "wb") as f:
-                    pickle.dump(saved_params, f)
-                hug_upload.upload(f"./saved_states_{run_name}", run_name,username="hegasz")
-                os.remove(f"./saved_states_{run_name}/saved_states_{current_episode}.pkl")
-
+                hug_upload.upload(f"./saved_params_{run_name}", run_name,username="hegasz")
+                shutil.rmtree(f"./saved_params_{run_name}/ep{current_episode}")
                 print("model saved")
             # start a new episode:
             next_obs = torch.Tensor(envs.reset()).to(device)
