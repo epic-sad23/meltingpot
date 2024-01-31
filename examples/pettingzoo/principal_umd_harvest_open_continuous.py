@@ -373,12 +373,8 @@ if __name__ == "__main__":
                 principal.update_tax_vals(principal_action)
                 tax_values.append(copy.deepcopy(principal.tax_vals))
             else:
-                warnings.warn("currently need to manually change this to match number of parallel games!!!!!!")
                 principal_actions[step] = torch.tensor([11]*3)
-                #principal_actions[step] = torch.stack((
-                #    torch.tensor([11]*3),
-                #    torch.tensor([11]*3))
-                #    )
+                principal_actions[step] = torch.full((args.num_parallel_games,3),11)
                 principal_logprobs[step] = torch.zeros(args.num_parallel_games)
 
 
