@@ -40,7 +40,7 @@ def parse_args():
         help="if toggled, `torch.backends.cudnn.deterministic=False`")
     parser.add_argument("--cuda", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
         help="if toggled, cuda will be enabled by default")
-    parser.add_argument("--track", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
+    parser.add_argument("--track", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
         help="if toggled, this experiment will be tracked with Weights and Biases")
     parser.add_argument("--wandb-project-name", type=str, default="umd-commons-harvest",
         help="the wandb's project name")
@@ -60,7 +60,7 @@ def parse_args():
         help="the learning rate of the optimizer")
     parser.add_argument("--adam-eps", type=float, default=1e-5,
         help="eps value for the optimizer")
-    parser.add_argument("--num-parallel-games", type=int, default=1,
+    parser.add_argument("--num-parallel-games", type=int, default=2,
         help="the number of parallel game environments")
     parser.add_argument("--num-episodes", type=int, default=100000,
         help="the number of steps in an episode")
@@ -374,10 +374,11 @@ if __name__ == "__main__":
                 tax_values.append(copy.deepcopy(principal.tax_vals))
             else:
                 warnings.warn("currently need to manually change this to match number of parallel games!!!!!!")
-                principal_actions[step] = torch.stack((
-                    #torch.tensor([11]*3),
-                    torch.tensor([11]*3))
-                    )
+                principal_actions[step] = torch.tensor([11]*3)
+                #principal_actions[step] = torch.stack((
+                #    torch.tensor([11]*3),
+                #    torch.tensor([11]*3))
+                #    )
                 principal_logprobs[step] = torch.zeros(args.num_parallel_games)
 
 

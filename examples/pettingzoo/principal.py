@@ -22,7 +22,7 @@ class Principal:
 
     def update_tax_vals(self, actions):
         for game_id in range(self.num_games):
-            tax_choices = actions[:,game_id]
+            tax_choices = actions[game_id]
             for bracket_idx in range(len(tax_choices)):
                 tax_val = tax_choices[bracket_idx].item()
                 if tax_val != 11:
