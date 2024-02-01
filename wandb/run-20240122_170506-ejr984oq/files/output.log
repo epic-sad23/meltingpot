@@ -1,7 +1,0 @@
-/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/pettingzoo/utils/conversions.py:320: UserWarning: The `infos` dictionary returned by `env.reset` was empty. OverwritingAgent IDs will be used as keys
-  warnings.warn(
-update number 1 total reward 17.0
-SPS: 15
-SPS: 23
-SPS: 28
-SPS: 31
