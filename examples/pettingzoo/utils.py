@@ -51,7 +51,12 @@ def timestep_to_observations(timestep):
         for key, value in observation.items()
         if 'WORLD.' not in key
     }
-  return gym_observations, timestep.observation[0]['WORLD.RGB']
+  nearby_observations = {}
+  for index in range(len(timestep.observation)):
+    nearby = timestep.observation[index]["NEARBY"]
+    nearby[index] = 0 # players shouldn't count themselves as nearby
+    nearby_observations[PLAYER_STR_FORMAT.format(index=index)] = nearby
+  return gym_observations, nearby_observations, timestep.observation[0]['WORLD.RGB']
 
 class _MeltingPotPettingZooEnv(pettingzoo_utils.ParallelEnv):
   """An adapter between Melting Pot substrates and PettingZoo's ParallelEnv."""
@@ -88,8 +93,9 @@ class _MeltingPotPettingZooEnv(pettingzoo_utils.ParallelEnv):
     timestep = self._env.reset()
     self.agents = self.possible_agents[:]
     self.num_cycles = 0
-    observations, world_obs = timestep_to_observations(timestep)
-    return observations, {agent: ({}, world_obs) for agent in self.agents}
+    observations, nearby_obs, world_obs = timestep_to_observations(timestep)
+
+    return observations, {agent: ({}, world_obs, nearby_obs[agent]) for agent in self.agents}
 
   def step(self, action):
     """See base class."""
@@ -101,8 +107,8 @@ class _MeltingPotPettingZooEnv(pettingzoo_utils.ParallelEnv):
     self.num_cycles += 1
     done = timestep.last() or self.num_cycles >= self.max_cycles
     dones = {agent: done for agent in self.agents}
-    observations, world_obs = timestep_to_observations(timestep)
-    infos = {agent: ({}, world_obs) for agent in self.agents}
+    observations, nearby_obs, world_obs = timestep_to_observations(timestep)
+    infos = {agent: ({}, world_obs, nearby_obs[agent]) for agent in self.agents}
     #infos = {agent: {} for agent in self.agents}
 
     if done:

@@ -5,9 +5,9 @@ import importlib
 import os
 import pickle
 import random
+import shutil
 import time
 import warnings
-import shutil
 
 import gymnasium as gym
 from meltingpot import substrate
@@ -40,17 +40,17 @@ def parse_args():
         help="if toggled, `torch.backends.cudnn.deterministic=False`")
     parser.add_argument("--cuda", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
         help="if toggled, cuda will be enabled by default")
-    parser.add_argument("--track", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
+    parser.add_argument("--track", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
         help="if toggled, this experiment will be tracked with Weights and Biases")
     parser.add_argument("--wandb-project-name", type=str, default="continuous-harvest-utilitarian",
         help="the wandb's project name")
     parser.add_argument("--wandb-entity", type=str, default=None,
         help="the entity (team) of wandb's project")
-    parser.add_argument("--capture-video", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
+    parser.add_argument("--capture-video", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
         help="whether to capture videos of the agent performances")
     parser.add_argument("--video-freq", type=int, default=100,
         help="capture video every how many episodes?")
-    parser.add_argument("--save-model", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
+    parser.add_argument("--save-model", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
         help="whether to save model parameters")
     parser.add_argument("--save-model-freq", type=int, default=1,
         help="save model parameters every how many episodes?")
@@ -60,13 +60,13 @@ def parse_args():
         help="the learning rate of the optimizer")
     parser.add_argument("--adam-eps", type=float, default=1e-5,
         help="eps value for the optimizer")
-    parser.add_argument("--num-parallel-games", type=int, default=1,
+    parser.add_argument("--num-parallel-games", type=int, default=2,
         help="the number of parallel game environments")
     parser.add_argument("--num-episodes", type=int, default=100000,
         help="the number of steps in an episode")
-    parser.add_argument("--episode-length", type=int, default=100,
+    parser.add_argument("--episode-length", type=int, default=30,
         help="the number of steps in an episode")
-    parser.add_argument("--sampling-horizon", type=int, default=100,
+    parser.add_argument("--sampling-horizon", type=int, default=10,
         help="the number of timesteps between policy update iterations")
     parser.add_argument("--anneal-lr", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
         help="Toggle learning rate annealing for policy and value networks")
@@ -186,6 +186,7 @@ if __name__ == "__main__":
     num_frames = 4
     model_path = None  # Replace this with a saved model
 
+
     env = utils.parallel_env(
         max_cycles=args.sampling_horizon,
         env_config=env_config,
@@ -194,7 +195,7 @@ if __name__ == "__main__":
     num_envs = args.num_parallel_games * num_agents
     env.render_mode = "rgb_array"
 
-    env = ss.observation_lambda_v0(env, lambda x, _: x["RGB"], lambda s: s["RGB"])
+    env = ss.observation_lambda_v0(env, lambda x, _: x["RGB"], lambda s: (s["RGB"]))
     env = ss.frame_stack_v1(env, num_frames)
     env = ss.agent_indicator_v0(env, type_only=False)
     env = pettingzoo_env_to_vec_env_v1(env)
@@ -211,6 +212,9 @@ if __name__ == "__main__":
     assert isinstance(envs.single_action_space, gym.spaces.Discrete), "only discrete action space is supported"
 
 
+    selfishness = np.random.uniform(size=[num_agents])
+
+
     agent = Agent(envs).to(device)
     optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=args.adam_eps)
 
@@ -222,7 +226,6 @@ if __name__ == "__main__":
     dones = torch.zeros((args.sampling_horizon, num_envs)).to(device)
     values = torch.zeros((args.sampling_horizon, num_envs)).to(device)
     world_obs = torch.zeros((args.sampling_horizon, args.num_parallel_games) + (144,192,3)).to(device)
-
 
     next_obs = torch.Tensor(envs.reset()).to(device)
     next_done = torch.zeros(num_envs).to(device)
@@ -289,6 +292,17 @@ if __name__ == "__main__":
             next_obs, reward, done, info = envs.step(action.cpu().numpy())
 
             next_world_obs = torch.stack([torch.Tensor(info[i][1]) for i in range(0,num_envs,num_agents)]).to(device)
+            nearby = torch.stack([torch.Tensor(info[i][2]) for i in range(0,num_envs)]).to(device)
+
+            # mix personal and nearby rewards
+            for game_id in range(args.num_parallel_games):
+                game_reward = reward[game_id*num_agents:(game_id+1)*num_agents]
+                for player_id in range(num_agents):
+                    env_id = player_id + game_id*num_agents
+                    w = selfishness[player_id]
+                    nearby_reward = sum(nearby[env_id] * game_reward)
+                    total_reward = w*reward[env_id] + (1-w)*nearby_reward
+                    reward[env_id] = total_reward
 
 
             rewards[step] = torch.tensor(reward).to(device).view(-1)

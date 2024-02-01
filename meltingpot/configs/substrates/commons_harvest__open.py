@@ -534,6 +534,7 @@ def get_config():
   # Observation format configuration.
   config.individual_observation_names = [
       "RGB",
+      "NEARBY"
   ]
   config.global_observation_names = [
       "WORLD.RGB",
@@ -545,6 +546,7 @@ def get_config():
       "RGB": specs.OBSERVATION["RGB"],
       # Debug only (do not use the following observations in policies).
       "WORLD.RGB": specs.rgb(144, 192),
+      ".NEARBY": specs.int32(10)
   })
 
   # The roles assigned to each player.

@@ -70,7 +70,7 @@ def parse_args():
         help="proportion of episodes over which to linearly anneal tax cap multiplier")
     parser.add_argument("--sampling-horizon", type=int, default=120,
         help="the number of timesteps between policy update iterations")
-    parser.add_argument("--tax-period", type=int, default=60,
+    parser.add_argument("--tax-period", type=int, default=1,
         help="the number of timesteps tax periods last (at end of period tax vals updated and taxes applied)")
     parser.add_argument("--anneal-tax", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
         help="Toggle tax cap annealing over an initial proportion of episodes")
