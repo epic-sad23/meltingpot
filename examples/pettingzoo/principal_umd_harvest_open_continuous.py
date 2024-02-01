@@ -48,7 +48,7 @@ def parse_args():
         help="the entity (team) of wandb's project")
     parser.add_argument("--capture-video", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
         help="whether to capture videos of the agent performances")
-    parser.add_argument("--video-freq", type=int, default=20,
+    parser.add_argument("--video-freq", type=int, default=100,
         help="capture video every how many episodes?")
     parser.add_argument("--save-model", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
         help="whether to save model parameters")
@@ -280,7 +280,9 @@ if __name__ == "__main__":
     envs.is_vector_env = True
     assert isinstance(envs.single_action_space, gym.spaces.Discrete), "only discrete action space is supported"
 
-    PLAYER_VALUES = np.random.uniform(size=[num_agents])*10
+    voting_values = np.random.uniform(size=[num_agents])*10
+    selfishness = np.random.uniform(size=[num_agents])
+    trust = np.random.uniform(size=[num_agents])
 
     agent = Agent(envs).to(device)
     principal_agent = PrincipalAgent(num_agents).to(device)
@@ -394,16 +396,32 @@ if __name__ == "__main__":
                   observation, and so will the next seven all share a world obs
                   - but the two will differ between each other.
             """
-            next_obs, reward, done, info = envs.step(action.cpu().numpy())
-            principal.report_reward(reward)
-            #print(step, principal.tax_vals, reward)
+            next_obs, extrinsic_reward, done, info = envs.step(action.cpu().numpy())
+            principal.report_reward(extrinsic_reward)
 
+            intrinsic_reward = torch.zeros_like(extrinsic_reward)
+
+            nearby = torch.stack([torch.Tensor(info[i][2]) for i in range(0,num_envs)]).to(device)
+            # mix personal and nearby rewards
+            for game_id in range(args.num_parallel_games):
+                game_reward = extrinsic_reward[game_id*num_agents:(game_id+1)*num_agents]
+                for player_id in range(num_agents):
+                    env_id = player_id + game_id*num_agents
+                    w = selfishness[player_id]
+                    nearby_reward = sum(nearby[env_id] * game_reward)
+                    intrinsic_reward[env_id] = w*extrinsic_reward[env_id] + (1-w)*nearby_reward
+
+            # make sure tax is applied after extrinsic reward is used for intrinsic reward calculation
             if (episode_step+1) % args.tax_period == 0:
                 # last step of tax period
                 taxes = principal.end_of_tax_period()
-                reward -= tax_frac * np.array(list(taxes.values())).flatten()
-                #print("post-tax reward", principal.tax_vals, reward)
+                extrinsic_reward -= tax_frac * np.array(list(taxes.values())).flatten()
 
+            reward = torch.zeros_like(extrinsic_reward)
+            for env_id in range(len(reward)):
+                player_id = env_id % num_agents
+                v = trust[player_id]
+                reward[env_id] = v*extrinsic_reward[env_id] + (1-v)*intrinsic_reward[env_id]
 
             principal_next_obs = torch.stack([torch.Tensor(info[i][1]) for i in range(0,num_envs,num_agents)]).to(device)
             principal_reward = principal.objective(reward) - prev_objective_val
@@ -661,7 +679,7 @@ if __name__ == "__main__":
 
 
             # vote on principal objective
-            principal_objective = vote(PLAYER_VALUES)
+            principal_objective = vote(voting_values)
             principal.set_objective(principal_objective)
 
             # start a new episode:
