@@ -20,8 +20,8 @@ import dm_env
 from meltingpot.utils.substrates import builder
 from meltingpot.utils.substrates import substrate
 
-from examples.pettingzoo import umd_substrate
-from examples.pettingzoo.principal import Principal
+from SocialEnvDesign import principal_substrate
+from SocialEnvDesign.principal import Principal
 
 
 class SubstrateFactory:
@@ -97,7 +97,7 @@ class SubstrateFactory:
         global_observations=self._global_observations,
         action_table=self._action_table)
 
-  def build_umd(self, roles: Sequence[str], principal: Principal) -> umd_substrate.UMDSubstrate:
+  def build_principal(self, roles: Sequence[str], principal: Principal) -> principal_substrate.PrincipalSubstrate:
     """Builds the substrate.
 
     Args:
@@ -106,7 +106,7 @@ class SubstrateFactory:
     Returns:
       The constructed substrate.
     """
-    return umd_substrate.build_substrate(
+    return principal_substrate.build_substrate(
         lab2d_settings=self._lab2d_settings_builder(roles),
         individual_observations=self._individual_observations,
         global_observations=self._global_observations,

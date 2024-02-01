@@ -20,8 +20,8 @@ from meltingpot.utils.substrates import substrate
 from meltingpot.utils.substrates import substrate_factory
 from ml_collections import config_dict
 
-from examples.pettingzoo import umd_substrate
-from examples.pettingzoo.principal import Principal
+from SocialEnvDesign import principal_substrate
+from SocialEnvDesign.principal import Principal
 
 SUBSTRATES = substrate_configs.SUBSTRATES
 
@@ -62,24 +62,24 @@ def build_from_config(
   """
   return get_factory_from_config(config).build(roles)
 
-def build_umd_from_config(
+def build_principal_from_config(
     config: config_dict.ConfigDict,
     *,
     roles: Sequence[str],
     principal: Principal
-) -> umd_substrate.UMDSubstrate:
+) -> principal_substrate.PrincipalSubstrate:
   """Builds a substrate from the provided config.
 
   Args:
     config: config resulting from `get_config`.
     roles: sequence of strings defining each player's role. The length of
       this sequence determines the number of players.
-    principal: the UMD principal
+    principal: the principal
 
   Returns:
-    The training UMD substrate.
+    The training substrate.
   """
-  return get_factory_from_config(config).build_umd(roles, principal)
+  return get_factory_from_config(config).build_principal(roles, principal)
 
 
 def get_factory(name: str) -> substrate_factory.SubstrateFactory:
