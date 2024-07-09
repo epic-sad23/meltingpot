@@ -64,12 +64,12 @@ class _MeltingPotPettingZooEnv(pettingzoo_utils.ParallelEnv):
   def __init__(self, env_config, max_cycles, principal=None):
     self.env_config = config_dict.ConfigDict(env_config)
     self.max_cycles = max_cycles
-    if principal is None:
-        self._env = substrate.build_from_config(
-            self.env_config, roles=self.env_config.default_player_roles)
-    else:
-        self._env = substrate.build_principal_from_config(
-            self.env_config, roles=self.env_config.default_player_roles, principal=principal)
+    # if principal is None:
+    self._env = substrate.build_from_config(
+        self.env_config, roles=self.env_config.default_player_roles)
+    # else:
+    #     self._env = substrate.build_principal_from_config(
+    #         self.env_config, roles=self.env_config.default_player_roles, principal=principal)
     self._num_players = len(self._env.observation_spec())
     self.possible_agents = [
         PLAYER_STR_FORMAT.format(index=index)
@@ -105,7 +105,7 @@ class _MeltingPotPettingZooEnv(pettingzoo_utils.ParallelEnv):
         agent: timestep.reward[index] for index, agent in enumerate(self.agents)
     }
     self.num_cycles += 1
-    done = timestep.last() or self.num_cycles >= self.max_cycles #!! what does max_cycles mean?
+    done = timestep.last() or self.num_cycles >= self.max_cycles #!! what does max_cycles
     dones = {agent: done for agent in self.agents}
     observations, nearby_obs, world_obs = timestep_to_observations(timestep)
     infos = {agent: ({}, world_obs, nearby_obs[agent]) for agent in self.agents}

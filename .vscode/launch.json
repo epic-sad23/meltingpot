@@ -8,7 +8,11 @@
       "name": "Python: cleanrl",
       "type": "python",
       "request": "launch",
-      "module": "examples.pettingzoo.cleanrl_train",
+      // "module": "examples.pettingzoo.cleanrl_train",
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}"
+      },
+      "program": "${workspaceFolder}/SocialEnvDesign/apple_picking_game.py",
       "justMyCode": true
     },
     {

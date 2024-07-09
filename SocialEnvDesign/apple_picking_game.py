@@ -30,7 +30,7 @@ from SocialEnvDesign.vector_constructors import sb3_concat_vec_envs_v1
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--exp-name", type=str, default=os.path.basename(__file__).rstrip(".py"),
+    parser.add_argument("--exp-name", type=str, default='test-no-tax',
         help="the name of this experiment")
     parser.add_argument("--seed", type=int, default=1,
         help="seed of the experiment")
@@ -38,9 +38,9 @@ def parse_args():
         help="if toggled, `torch.backends.cudnn.deterministic=False`")
     parser.add_argument("--cuda", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
         help="if toggled, cuda will be enabled by default")
-    parser.add_argument("--track", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
+    parser.add_argument("--track", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
         help="if toggled, this experiment will be tracked with Weights and Biases")
-    parser.add_argument("--wandb-project-name", type=str, default="apple-picking-game",
+    parser.add_argument("--wandb-project-name", type=str, default="apple-picking-game-no-tax",
         help="the wandb's project name")
     parser.add_argument("--wandb-entity", type=str, default=None,
         help="the entity (team) of wandb's project")
@@ -64,7 +64,7 @@ def parse_args():
         help="the number of game frames to stack together")
     parser.add_argument("--num-episodes", type=int, default=100000,
         help="the number of steps in an episode")
-    parser.add_argument("--episode-length", type=int, default=200,
+    parser.add_argument("--episode-length", type=int, default=1000,
         help="the number of steps in an episode")
     parser.add_argument("--tax-annealment-proportion", type=float, default=0.02,
         help="proportion of episodes over which to linearly anneal tax cap multiplier")
@@ -258,7 +258,7 @@ if __name__ == "__main__":
     agent = Agent(envs).to(device)
     principal_agent = PrincipalAgent(num_agents).to(device)
     optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=args.adam_eps)
-    principal_optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=args.adam_eps)
+    principal_optimizer = optim.Adam(principal_agent.parameters(), lr=args.learning_rate, eps=args.adam_eps)
 
     # ALGO Logic: Storage setup
     obs = torch.zeros((args.sampling_horizon, num_envs) + envs.single_observation_space.shape).to(device)
@@ -281,6 +281,7 @@ if __name__ == "__main__":
     next_cumulative_reward = torch.zeros(args.num_parallel_games, num_agents).to(device)
 
     principal_next_obs = torch.stack([torch.Tensor(envs.reset_infos[i][1]) for i in range(0,num_envs,num_agents)]).to(device)
+    # breakpoint()
     principal_next_done = torch.zeros(args.num_parallel_games).to(device)
 
     num_policy_updates_per_ep = args.episode_length // args.sampling_horizon
@@ -306,16 +307,16 @@ if __name__ == "__main__":
     #agent.load_state_dict(torch.load("./model9399.pth"))
 
     for update in range(1, num_policy_updates_total + 1):
+        print('UPDATE: ', update, 'of', num_policy_updates_total)
+        # # annealing the rate if instructed to do so
+        # if args.anneal_lr:
+        #     frac = 1.0 - (update - 1.0) / num_policy_updates_total
+        #     lrnow = frac * args.learning_rate
+        #     optimizer.param_groups[0]["lr"] = lrnow
 
-        # annealing the rate if instructed to do so
-        if args.anneal_lr:
-            frac = 1.0 - (update - 1.0) / num_policy_updates_total
-            lrnow = frac * args.learning_rate
-            optimizer.param_groups[0]["lr"] = lrnow
-
-        # annealing tax controlling multiplier
-        if args.anneal_tax:
-            tax_frac = 0.1 + 0.9*min((current_episode - 1.0) / (args.num_episodes*args.tax_annealment_proportion),1)
+        # # annealing tax controlling multiplier
+        # if args.anneal_tax:
+        #     tax_frac = 0.1 + 0.9*min((current_episode - 1.0) / (args.num_episodes*args.tax_annealment_proportion),1)
 
         # collect data for policy update
         start_step = episode_step
@@ -380,11 +381,11 @@ if __name__ == "__main__":
                     nearby_reward = sum(nearby[env_id] * game_reward)
                     intrinsic_reward[env_id] = w*extrinsic_reward[env_id] + (1-w)*nearby_reward
 
-            # make sure tax is applied after extrinsic reward is used for intrinsic reward calculation
-            if (episode_step+1) % args.tax_period == 0:
-                # last step of tax period
-                taxes = principal.end_of_tax_period()
-                extrinsic_reward -= tax_frac * np.array(list(taxes.values())).flatten()
+            # # make sure tax is applied after extrinsic reward is used for intrinsic reward calculation
+            # if (episode_step+1) % args.tax_period == 0:
+            #     # last step of tax period
+            #     taxes = principal.end_of_tax_period()
+            #     extrinsic_reward -= tax_frac * np.array(list(taxes.values())).flatten()
 
             reward = np.zeros_like(extrinsic_reward)
             for env_id in range(len(reward)):
@@ -473,9 +474,9 @@ if __name__ == "__main__":
         # Optimizing the agent policy and value network
         b_inds = np.arange(len(b_obs))
         clipfracs = []
-        for epoch in range(args.update_epochs):
+        for epoch in range(args.update_epochs): #! num updates per collection
             np.random.shuffle(b_inds)
-            for start in range(0, len(b_obs), args.minibatch_size):
+            for start in range(0, len(b_obs), args.minibatch_size): #! minibatch size per update
                 end = start + args.minibatch_size
                 mb_inds = b_inds[start:end]
                 _, newlogprob, entropy, newvalue = agent.get_action_and_value(b_obs[mb_inds], b_actions.long()[mb_inds])
@@ -628,8 +629,9 @@ if __name__ == "__main__":
             writer.add_scalar("losses/explained_variance", explained_var, current_episode)
             writer.add_scalar("charts/mean_episodic_return", torch.mean(episode_rewards), current_episode)
             writer.add_scalar("charts/episode", current_episode, current_episode)
-            writer.add_scalar("charts/tax_frac", tax_frac, current_episode)
+            # writer.add_scalar("charts/tax_frac", tax_frac, current_episode)
             mean_rewards_across_envs = {player_idx:0 for player_idx in range(0, num_agents)}
+            print('EPISODE_REWARDS:', episode_rewards)
             for idx in range(len(episode_rewards)):
                 mean_rewards_across_envs[idx%num_agents] += episode_rewards[idx].item()
             mean_rewards_across_envs = list(map(lambda x: x/args.num_parallel_games, mean_rewards_across_envs.values()))
@@ -681,7 +683,6 @@ if __name__ == "__main__":
             episode_rewards = torch.zeros(num_envs).to(device)
             principal_episode_rewards = torch.zeros(args.num_parallel_games).to(device)
             tax_values = []
-            exit(0)
 
     envs.close()
     writer.close()
