@@ -1,5 +1,21 @@
 # Melting Pot
 
+# USAGE (python=3.11.9)
+
+```
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+pip install -e .
+export PYTHONPATH=$PWD
+python ./SocialEnvDesign/apple_picking_game.py
+```
+
+A picture of the results of the apple picking game is shown below (run over two different seeds):
+![results](./results.png)
+
+Note that a video is also generated and saved in the `./videos` directory, as well as online to wandb.
+
 *A suite of test scenarios for multi-agent reinforcement learning.*
 
 [![Python](https://img.shields.io/pypi/pyversions/dm-meltingpot.svg)](https://pypi.python.org/pypi/dm-meltingpot)

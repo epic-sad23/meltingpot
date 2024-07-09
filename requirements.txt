@@ -134,4 +134,4 @@ Werkzeug==3.0.1
 wheel==0.42.0
 wrapt==1.14.1
 huggingface_hub==0.23.4
-pyav==12.2.0
+av==12.2.0
