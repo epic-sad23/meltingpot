@@ -42,13 +42,13 @@ import in
 from
 
 ```python
-from .configs.environment import harvest as game
+from SocialEnvDesign.configs.environment import harvest as game
 ```
 
 to
 
 ```python
-from .configs.environment import harvest_finished as game
+from SocialEnvDesign.configs.environment import harvest_finished as game
 ```
 
 and launch as desired:

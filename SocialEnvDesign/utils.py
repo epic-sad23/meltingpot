@@ -105,7 +105,7 @@ class _MeltingPotPettingZooEnv(pettingzoo_utils.ParallelEnv):
         agent: timestep.reward[index] for index, agent in enumerate(self.agents)
     }
     self.num_cycles += 1
-    done = timestep.last() or self.num_cycles >= self.max_cycles
+    done = timestep.last() or self.num_cycles >= self.max_cycles #!! what does max_cycles mean?
     dones = {agent: done for agent in self.agents}
     observations, nearby_obs, world_obs = timestep_to_observations(timestep)
     infos = {agent: ({}, world_obs, nearby_obs[agent]) for agent in self.agents}

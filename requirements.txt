@@ -62,7 +62,7 @@ MarkupSafe==2.1.4
 matplotlib==3.8.2
 matplotlib-inline==0.1.6
 mdurl==0.1.2
-meltingpot==1.0.0
+# meltingpot==1.0.0
 ml_collections==0.1.1
 ml-dtypes==0.2.0
 moviepy==1.0.3
@@ -110,12 +110,12 @@ stable-baselines3==2.2.1
 stack-data==0.6.3
 SuperSuit==3.9.2
 sympy==1.12
-tensorboard==2.15.1
-tensorboard-data-server==0.7.2
-tensorflow==2.15.0
-tensorflow-estimator==2.15.0
-tensorflow-io-gcs-filesystem==0.34.0
-tensorflow-macos==2.15.0
+# tensorboard==2.15.1
+# tensorboard-data-server==0.7.2
+# tensorflow==2.15.0
+# tensorflow-estimator==2.15.0
+# tensorflow-io-gcs-filesystem==0.34.0
+# tensorflow-macos==2.15.0
 termcolor==2.4.0
 tinyscaler==1.2.7
 toolz==0.12.0
@@ -133,3 +133,5 @@ wcwidth==0.2.13
 Werkzeug==3.0.1
 wheel==0.42.0
 wrapt==1.14.1
+huggingface_hub==0.23.4
+pyav==12.2.0

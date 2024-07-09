@@ -1,3 +1,5 @@
+import time
+s = time.time()
 import argparse
 import copy
 from distutils.util import strtobool
@@ -18,12 +20,12 @@ import torch.optim as optim
 from torch.utils.tensorboard import SummaryWriter
 import torchvision
 
-from . import huggingface_upload
-from . import utils
-from .principal import Principal
-from .principal_utils import vote
-from .vector_constructors import pettingzoo_env_to_vec_env_v1
-from .vector_constructors import sb3_concat_vec_envs_v1
+from SocialEnvDesign import huggingface_upload
+from SocialEnvDesign import utils
+from SocialEnvDesign.principal import Principal
+from SocialEnvDesign.principal_utils import vote
+from SocialEnvDesign.vector_constructors import pettingzoo_env_to_vec_env_v1
+from SocialEnvDesign.vector_constructors import sb3_concat_vec_envs_v1
 
 
 def parse_args():
@@ -36,7 +38,7 @@ def parse_args():
         help="if toggled, `torch.backends.cudnn.deterministic=False`")
     parser.add_argument("--cuda", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
         help="if toggled, cuda will be enabled by default")
-    parser.add_argument("--track", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
+    parser.add_argument("--track", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
         help="if toggled, this experiment will be tracked with Weights and Biases")
     parser.add_argument("--wandb-project-name", type=str, default="apple-picking-game",
         help="the wandb's project name")
@@ -44,7 +46,7 @@ def parse_args():
         help="the entity (team) of wandb's project")
     parser.add_argument("--capture-video", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
         help="whether to capture videos of the agent performances")
-    parser.add_argument("--video-freq", type=int, default=20,
+    parser.add_argument("--video-freq", type=int, default=1,
         help="capture video every how many episodes?")
     parser.add_argument("--save-model", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
         help="whether to save model parameters")
@@ -62,7 +64,7 @@ def parse_args():
         help="the number of game frames to stack together")
     parser.add_argument("--num-episodes", type=int, default=100000,
         help="the number of steps in an episode")
-    parser.add_argument("--episode-length", type=int, default=1000,
+    parser.add_argument("--episode-length", type=int, default=200,
         help="the number of steps in an episode")
     parser.add_argument("--tax-annealment-proportion", type=float, default=0.02,
         help="proportion of episodes over which to linearly anneal tax cap multiplier")
@@ -219,7 +221,7 @@ if __name__ == "__main__":
 
     device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
     print("device:", device)
-
+    print('time taken to load:', time.time()-s)
     env_name = "commons_harvest__open"
     env_config = substrate.get_config(env_name)
 
@@ -601,7 +603,8 @@ if __name__ == "__main__":
         if num_updates_for_this_ep == num_policy_updates_per_ep:
             # episode finished
 
-            if args.capture_video and current_episode%args.video_freq == 0:
+            # if args.capture_video and current_episode%args.video_freq == 0:
+            if True:
                 # currently only records first of any parallel games running but
                 # this is easily changed at the point where we add to episode_world_obs
                 video = torch.cat(episode_world_obs, dim=0).cpu()
@@ -610,7 +613,7 @@ if __name__ == "__main__":
                 except FileExistsError:
                     pass
                 torchvision.io.write_video(f"./videos_{run_name}/episode_{current_episode}.mp4", video, fps=20)
-                huggingface_upload.upload(f"./videos_{run_name}", run_name)
+                # huggingface_upload.upload(f"./videos_{run_name}", run_name)
                 if args.track:
                     wandb.log({"video": wandb.Video(f"./videos_{run_name}/episode_{current_episode}.mp4")})
                 os.remove(f"./videos_{run_name}/episode_{current_episode}.mp4")
@@ -678,6 +681,7 @@ if __name__ == "__main__":
             episode_rewards = torch.zeros(num_envs).to(device)
             principal_episode_rewards = torch.zeros(args.num_parallel_games).to(device)
             tax_values = []
+            exit(0)
 
     envs.close()
     writer.close()

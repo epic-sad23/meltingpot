@@ -28,7 +28,7 @@ from meltingpot.utils.substrates.wrappers import observables_wrapper
 import reactivex
 from reactivex import subject
 
-from .principal import Principal
+from SocialEnvDesign.principal import Principal
 
 
 @chex.dataclass(frozen=True)
